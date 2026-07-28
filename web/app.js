@@ -467,10 +467,10 @@ function renderDag() {
   // Add marker defs for arrowheads
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = `
-    <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="arrow" viewBox="0 0 10 10" refX="26" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
     </marker>
-    <marker id="arrow-active" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="arrow-active" viewBox="0 0 10 10" refX="26" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
     </marker>
   `;
@@ -525,23 +525,23 @@ function renderDag() {
 
   // Calculate coordinates & dimensions
   const nodeCoords = {};
-  const layerWidth = 150;
-  const nodeHeight = 65;
+  const layerWidth = 160;
+  const nodeHeight = 70;
 
   let maxLayerSize = 0;
   layers.forEach(l => { if (l.length > maxLayerSize) maxLayerSize = l.length; });
 
-  const totalWidth = Math.max(800, layers.length * layerWidth + 160);
-  const totalHeight = Math.max(480, maxLayerSize * nodeHeight + 120);
+  const totalWidth = Math.max(900, layers.length * layerWidth + 180);
+  const totalHeight = Math.max(500, maxLayerSize * nodeHeight + 140);
 
   svg.setAttribute('width', totalWidth);
   svg.setAttribute('height', totalHeight);
   svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
 
   layers.forEach((layer, layerIdx) => {
-    const x = 80 + layerIdx * layerWidth;
+    const x = 90 + layerIdx * layerWidth;
     const layerH = layer.length * nodeHeight;
-    const startY = (totalHeight - layerH) / 2 + 30;
+    const startY = (totalHeight - layerH) / 2 + 35;
 
     layer.forEach((nodeId, idx) => {
       const y = startY + idx * nodeHeight;
@@ -563,8 +563,8 @@ function renderDag() {
         line.setAttribute('x2', target.x);
         line.setAttribute('y2', target.y);
         line.setAttribute('stroke', '#38bdf8');
-        line.setAttribute('stroke-width', '2.5');
-        line.setAttribute('stroke-dasharray', '4 2');
+        line.setAttribute('stroke-width', '3');
+        line.setAttribute('stroke-dasharray', '6 3');
         line.setAttribute('marker-end', 'url(#arrow)');
         line.setAttribute('class', 'dag-edge');
 
@@ -586,21 +586,23 @@ function renderDag() {
     g.setAttribute('transform', `translate(${coord.x}, ${coord.y})`);
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '0');
+    circle.setAttribute('cy', '0');
     circle.setAttribute('r', '22');
     
-    let fillColor = '#0f172a';
-    let strokeColor = '#06b6d4';
+    let fillColor = '#0284c7';   // Vibrant Blue
+    let strokeColor = '#38bdf8'; // Light cyan border
     if (t.isConditional) {
-      fillColor = '#831843';
-      strokeColor = '#ec4899';
+      fillColor = '#db2777';   // Vibrant Pink
+      strokeColor = '#f472b6'; // Light pink border
     } else if (t.isUnpredicted) {
-      fillColor = '#78350f';
-      strokeColor = '#f59e0b';
+      fillColor = '#d97706';   // Vibrant Amber
+      strokeColor = '#fbbf24'; // Light yellow border
     }
 
     circle.setAttribute('fill', fillColor);
     circle.setAttribute('stroke', strokeColor);
-    circle.setAttribute('stroke-width', '3');
+    circle.setAttribute('stroke-width', '3.5');
     circle.setAttribute('class', 'dag-node');
 
     const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -611,13 +613,16 @@ function renderDag() {
     g.appendChild(title);
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', '0');
+    text.setAttribute('y', '0');
     text.setAttribute('fill', '#ffffff');
-    text.setAttribute('font-size', '13px');
-    text.setAttribute('font-weight', 'bold');
-    text.setAttribute('font-family', 'var(--font-mono), monospace, sans-serif');
+    text.setAttribute('font-size', '14px');
+    text.setAttribute('font-weight', '900');
+    text.setAttribute('font-family', 'monospace, sans-serif');
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('dominant-baseline', 'central');
-    text.setAttribute('dy', '1');
+    text.setAttribute('alignment-baseline', 'middle');
+    text.setAttribute('dy', '0.3em');
     text.textContent = `T${t.id}`;
 
     g.appendChild(circle);
@@ -628,7 +633,6 @@ function renderDag() {
 
 async function runBenchmark() {
   const filename = document.getElementById('fileSelect').value || 'graph20.dat';
-  switchView('benchmark');
 
   const statusBox = document.getElementById('benchmarkStatusBox');
   const statusText = document.getElementById('benchmarkStatusText');
@@ -637,8 +641,8 @@ async function runBenchmark() {
   const barChartContainer = document.getElementById('benchmarkBarChart');
 
   if (statusBox) statusBox.classList.remove('hidden');
-  cardsContainer.innerHTML = '';
-  barChartContainer.innerHTML = '';
+  if (cardsContainer) cardsContainer.innerHTML = '';
+  if (barChartContainer) barChartContainer.innerHTML = '';
 
   const stratList = [
     { id: 1, name: 'S1: Najszybsza Dedykowana' },
@@ -775,6 +779,7 @@ function switchView(viewName) {
   } else if (viewName === 'benchmark') {
     document.querySelector("button[onclick=\"switchView('benchmark')\"]").classList.add('active');
     document.getElementById('viewBenchmark').classList.add('active');
+    runBenchmark();
   } else if (viewName === 'editor') {
     document.querySelector("button[onclick=\"switchView('editor')\"]").classList.add('active');
     document.getElementById('viewEditor').classList.add('active');
