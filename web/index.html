@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pl">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
   <link rel="stylesheet" href="style.css?v=1.0.4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+    rel="stylesheet">
 </head>
+
 <body>
   <div class="app-container">
     <!-- Top Header -->
@@ -33,7 +37,7 @@
       <aside class="sidebar">
         <div class="card">
           <h2 class="card-title">⚙️ Konfiguracja Problemu</h2>
-          
+
           <!-- Mode Switcher -->
           <div class="tab-switch">
             <button class="switch-btn active" id="modeFileBtn" onclick="setSourceMode('file')">Z Pliku .dat</button>
@@ -94,7 +98,7 @@
           <!-- Main Actions -->
           <div class="actions">
             <button class="btn btn-primary" onclick="runSimulation()">
-              <span class="btn-icon">🚀</span> Uruchom Symulację
+              <span class="btn-icon">🚀</span> Załaduj ustawienia
             </button>
             <button class="btn btn-secondary" onclick="runBenchmark()">
               <span class="btn-icon">📊</span> Porównaj Strategie
@@ -194,7 +198,8 @@
             <!-- Speed / Tempo Slider -->
             <div class="tempo-control">
               <span>⏱️ Tempo (ms/tyknięcie):</span>
-              <input type="range" id="simTempoSlider" min="20" max="1000" value="200" step="10" oninput="LiveSimulator.onSpeedChange(this.value)">
+              <input type="range" id="simTempoSlider" min="20" max="1000" value="200" step="10"
+                oninput="LiveSimulator.onSpeedChange(this.value)">
               <span id="simTempoVal" class="badge">200 ms</span>
               <div class="quick-speed-btns">
                 <button class="btn-speed" onclick="LiveSimulator.setSpeedRatio(0.5)">0.5x</button>
@@ -321,4 +326,5 @@
 
   <script src="app.js?v=1.0.4"></script>
 </body>
+
 </html>

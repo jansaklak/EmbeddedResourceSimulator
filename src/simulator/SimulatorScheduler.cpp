@@ -257,9 +257,28 @@ void TaskSchedulerSimulator::scheduleConstrainedPenaltyOptimization() {
 // S9: Monolityczna Jednoprocesorowa (Single Core Baseline)
 void TaskSchedulerSimulator::scheduleSingleCoreBaseline() {
     int tasks_amount = TaskGraph.getVerticesSize();
-    createInstance(0);
-    for (int t = 0; t < tasks_amount; t++) {
-        addTaskToInstance(t, getInstance(0));
+    if (tasks_amount == 0) return;
+
+    HardwareProcessor* hw = getLowestTimeHardware(0, 0);
+    if (!hw && !Hardwares.empty()) hw = &Hardwares[0];
+    if (!hw) return;
+
+    createInstance(0, hw);
+    HardwareInstance* singleInst = getInstance(0);
+    if (!singleInst) return;
+
+    for (int t = 1; t < tasks_amount; t++) {
+        if (unpredictedTasks.find(t) != unpredictedTasks.end()) {
+            unpredictedHandler(t);
+            continue;
+        }
+        if (extendedTasks.find(t) != extendedTasks.end()) {
+            subTaskHandler(t);
+            continue;
+        }
+        singleInst->addTask(t);
+        taskInstanceMap[t] = singleInst;
+        allocated_tasks[t] = 1;
     }
 }
 

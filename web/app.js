@@ -2,20 +2,21 @@ let currentMode = 'file';
 let currentSimData = null;
 let currentFileList = [];
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadFileList();
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadFileList();
 
-  document.getElementById('fileSelect').addEventListener('change', (e) => {
-    if (e.target.value) {
-      document.getElementById('currentFileBadge').textContent = `Plik: ${e.target.value}`;
-      loadEditorContent(e.target.value);
-    }
-  });
+  const fileSel = document.getElementById('fileSelect');
+  if (fileSel) {
+    fileSel.addEventListener('change', (e) => {
+      if (e.target.value) {
+        document.getElementById('currentFileBadge').textContent = `Plik: ${e.target.value}`;
+        loadEditorContent(e.target.value);
+      }
+    });
+  }
 
-  // Auto-run simulation on startup
-  setTimeout(() => {
-    runSimulation();
-  }, 300);
+  // Run initial simulation safely after files are loaded
+  runSimulation();
 });
 
 function setSourceMode(mode) {
@@ -32,6 +33,7 @@ async function loadFileList() {
     const files = await res.json();
     currentFileList = files;
     const select = document.getElementById('fileSelect');
+    if (!select) return;
     select.innerHTML = '';
     if (files.length === 0) {
       select.innerHTML = '<option value="">Brak plików w data/</option>';
@@ -46,7 +48,7 @@ async function loadFileList() {
     });
     if (select.value) {
       document.getElementById('currentFileBadge').textContent = `Plik: ${select.value}`;
-      loadEditorContent(select.value);
+      await loadEditorContent(select.value);
     }
   } catch (err) {
     logConsole("Błąd ładowania listy plików: " + err.message);
@@ -86,7 +88,8 @@ async function saveEditorContent() {
 }
 
 async function runSimulation() {
-  const strategy = parseInt(document.getElementById('strategySelect').value, 10);
+  const strategySelect = document.getElementById('strategySelect');
+  const strategy = strategySelect ? parseInt(strategySelect.value, 10) : 8;
   let payload = { strategy };
 
   if (currentMode === 'random') {
@@ -99,9 +102,10 @@ async function runSimulation() {
     payload.conditional = document.getElementById('randConditional').checked;
     logConsole(`Uruchamianie losowej symulacji: Zadań=${payload.tasks}, Strategy=${strategy}...`);
   } else {
-    const filename = document.getElementById('fileSelect').value;
+    const select = document.getElementById('fileSelect');
+    const filename = select ? select.value : '';
     if (!filename) {
-      alert("Proszę wybrać plik danych!");
+      logConsole("Oczekiwanie na wybór pliku danych...");
       return;
     }
     payload.random = false;
@@ -677,6 +681,7 @@ async function runBenchmark() {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
+      if (!data.error) {
         const activeCount = data.activeInstancesCount !== undefined 
           ? data.activeInstancesCount 
           : (new Set((data.schedule || []).map(x => x.unit).filter(Boolean)).size);
