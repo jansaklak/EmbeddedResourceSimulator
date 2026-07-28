@@ -7,7 +7,7 @@
 #include <mutex>
 #include <map>
 
-void Cost_List::reallocateFastest(int maxTIME,std::vector<bool>& checked){
+void TaskSchedulerSimulator::reallocateFastest(int maxTIME,std::vector<bool>& checked){
     
     int lastFastestTaskID = -1;
     int endingTime = INF;

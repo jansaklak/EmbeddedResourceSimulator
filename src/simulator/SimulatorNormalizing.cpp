@@ -90,7 +90,7 @@ void normalize(std::vector<WeightTable>& values) {
     } 
 }
 
-void Cost_List::constructByWeight(std::vector<int> bfs_tasks,int MAX_TIME){
+void TaskSchedulerSimulator::constructByWeight(std::vector<int> bfs_tasks,int MAX_TIME){
     std::vector<Instance*> possibleInstances;
     int i = tasks_amount * 10;
     for (const Hardware& hw : Hardwares){
@@ -138,7 +138,7 @@ void Cost_List::constructByWeight(std::vector<int> bfs_tasks,int MAX_TIME){
     }
 }
 
-void Cost_List::getCurrWeight(int task_id,bool changeInstances,int MAX_TIME){
+void TaskSchedulerSimulator::getCurrWeight(int task_id,bool changeInstances,int MAX_TIME){
     //std::cout<<"\nDLA ZADANIA " << task_id << "\n";
     double remaining_time;
     double longest_running;
@@ -206,7 +206,7 @@ void Cost_List::getCurrWeight(int task_id,bool changeInstances,int MAX_TIME){
     }  
 }
 
-double Cost_List::time_cost_proc(int task_id,const Instance* inst,double t_factor,double c_factor,double p_factor){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::time_cost_proc(int task_id,const Instance* inst,double t_factor,double c_factor,double p_factor){ //WIECEJ - GORZEJ
     double val;
     val = times.getTime(task_id,inst->getHardwarePtr()) * t_factor + times.getCost(task_id,inst->getHardwarePtr()) * c_factor;
     if(inst->isVirtual()){
@@ -215,47 +215,47 @@ double Cost_List::time_cost_proc(int task_id,const Instance* inst,double t_facto
     return val;
 }
 
-double Cost_List::time_cost(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::time_cost(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     return times.getTime(task_id,inst->getHardwarePtr()) * 1.0 + times.getCost(task_id,inst->getHardwarePtr());
 }
 
-double Cost_List::time_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::time_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     return times.getTime(task_id,inst->getHardwarePtr());
 }
 
-double Cost_List::reuse_time_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::reuse_time_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     if(inst->isVirtual()) return INF;
     return times.getTime(task_id,inst->getHardwarePtr());    
 }
 
-double Cost_List::cost_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::cost_weight(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     return times.getCost(task_id,inst->getHardwarePtr());
 }
 
-double Cost_List::allocated_cost(int task_id,const Instance* inst,double MAX_TIME){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::allocated_cost(int task_id,const Instance* inst,double MAX_TIME){ //WIECEJ - GORZEJ
     return time_cost_proc(task_id,inst,getCriticalTime()/MAX_TIME); //MAX_TIME rosnie to coraz mniej istotny czas
 }
 
-double Cost_List::inst_starting(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::inst_starting(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     if(inst->isVirtual()) return INF;
     return inst->getTaskSet().size();
 }
 
-double Cost_List::inst_time_running(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::inst_time_running(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     if(inst->isVirtual()) return INF;
     return getTimeRunning(inst);
 }
 
-double Cost_List::reCalculate(int task_id,const Instance* inst){ 
+double TaskSchedulerSimulator::reCalculate(int task_id,const Instance* inst){ 
     return 0;
 }
 
-double Cost_List::longestIdle(int task_id,const Instance* inst){ //WIECEJ - LEPIEJ
+double TaskSchedulerSimulator::longestIdle(int task_id,const Instance* inst){ //WIECEJ - LEPIEJ
     if(inst->isVirtual()) return 0;
     return getIdleTime(inst,getStartingTime(task_id));
 }
 
-double Cost_List::asBefore(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
+double TaskSchedulerSimulator::asBefore(int task_id,const Instance* inst){ //WIECEJ - GORZEJ
     if(inst->isVirtual()){
         return 1;
     }

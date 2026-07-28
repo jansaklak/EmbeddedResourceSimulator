@@ -2,7 +2,7 @@
 #ifndef INSTANCE_H
 #define INSTANCE_H
 
-#include "Hardware.h"
+#include "HardwareProcessor.h"
 #include <set>
 #include <iostream>
 

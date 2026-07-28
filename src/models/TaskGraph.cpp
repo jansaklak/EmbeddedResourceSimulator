@@ -127,7 +127,7 @@ void TaskGraph::DFSUtil(int v, std::vector<bool>& visited, std::vector<int>& pat
     if (v == destination) {
         allPaths.push_back(path);
     } else {
-        std::vector<int> neighbours = getNeighbourIndices(v);
+        std::vector<int> neighbours = getOutNeighbourIndices(v);
         for (int u : neighbours) {
             if (!visited[u]) {
                 DFSUtil(u, visited, path, allPaths, destination);

@@ -28,7 +28,7 @@ std::string trim(const std::string &s) {
     return std::string(start, end + 1);
 }
 
-int Cost_List::Load_Config(){
+int TaskSchedulerSimulator::Load_Config(){
     try {
         ConfigParser parser(&CostListConfig);
         parser.parseFile("config.dat");
@@ -54,7 +54,7 @@ std::vector<int> parseNumbers(const std::string& input) {
     return numbers;
 }
 
-int Cost_List::Load_From_File(const std::string& filename) {
+int TaskSchedulerSimulator::Load_From_File(const std::string& filename) {
     Load_Config();
     clear();
     clearNUM();
@@ -79,7 +79,12 @@ int Cost_List::Load_From_File(const std::string& filename) {
     while (getline(file, line)) {
         if (line.find("@tasks") != std::string::npos) {
             section = 0;
-            //std::cout << "Sekcja @tasks" << std::endl;
+            std::stringstream ss(line);
+            std::string tag;
+            if (ss >> tag >> tasks_amount) {
+                allocated_tasks.assign(tasks_amount, 0);
+                progress.assign(tasks_amount, -2);
+            }
         } else if (line.find("@proc") != std::string::npos) {
             section = 1;
             //std::cout << "Sekcja @proc" << std::endl;
@@ -319,12 +324,17 @@ int Cost_List::Load_From_File(const std::string& filename) {
             taskIDCounter++;
         }
     }
+    if (tasks_amount == 0 || tasks_amount < TaskGraph.getVerticesSize()) {
+        tasks_amount = TaskGraph.getVerticesSize();
+    }
+    allocated_tasks.assign(tasks_amount, 0);
+    progress.assign(tasks_amount, -2);
     std::cout << "\nWCZYTANO GRAF\n";
     file.close();
     return 1;
 }
 
-void Cost_List::createRandomTasksGraph() {
+void TaskSchedulerSimulator::createRandomTasksGraph() {
     Load_Config();
     if (tasks_amount <= 1) {
         std::cerr << "Błędna liczba zadań";
@@ -380,7 +390,7 @@ void Cost_List::createRandomTasksGraph() {
     return;
 }
 
-void Cost_List::createRandomConditionalTasksGraph() {
+void TaskSchedulerSimulator::createRandomConditionalTasksGraph() {
     for(int t=0; t<tasks_amount;t++){
         if(t != 0 && randomBool(tasks_amount / 10)){
             makeConditional(t);
@@ -388,7 +398,7 @@ void Cost_List::createRandomConditionalTasksGraph() {
     }
 }
 
-void Cost_List::makeConditional(int Task_ID) {
+void TaskSchedulerSimulator::makeConditional(int Task_ID) {
 
     conditionalTasks.insert(Task_ID);
 

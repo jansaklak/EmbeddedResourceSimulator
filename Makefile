@@ -26,7 +26,14 @@ gui: main
 debug: main
 	gdb main
 
-clean:
-	rm -rf main main.o *.o *.Identifier data/*.temp src/models/*.o src/simulator/*.o
+test: $(MODEL_OBJS) $(SIMULATOR_OBJS) tests/test_simulator.cpp
+	$(CC) $(CFLAGS) $(MODEL_OBJS) $(SIMULATOR_OBJS) tests/test_simulator.cpp -o test_runner
+	./test_runner
 
-.PHONY: all run gui debug clean
+clean:
+	rm -rf main main.o test_runner *.o *.Identifier data/*.temp src/models/*.o src/simulator/*.o
+
+push:
+	./push_to_github.sh "$(msg)"
+
+.PHONY: all run gui debug test clean push

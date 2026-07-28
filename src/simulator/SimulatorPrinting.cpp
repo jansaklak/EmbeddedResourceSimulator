@@ -8,7 +8,7 @@
 #include <map>
 
 
-void Cost_List::printSchedule() {
+void TaskSchedulerSimulator::printSchedule() {
     int instance_ending_time;
     int criticalTime = 0;
 
@@ -78,7 +78,7 @@ void printWeightTable(const WeightTable& wt) {
     std::cout << "asBefore: " << std::setw(5) << wt.asBefore << "\n";
 }
 
-void Cost_List::printTasks(std::ostream& out) const{
+void TaskSchedulerSimulator::printTasks(std::ostream& out) const{
     out << "@tasks " << tasks_amount << std::endl;
     std::vector<int> outIdx;
     int size = tasks_amount;
@@ -99,14 +99,14 @@ void Cost_List::printTasks(std::ostream& out) const{
     }
 }
 
-void Cost_List::printCOMS(std::ostream& out) const{
+void TaskSchedulerSimulator::printCOMS(std::ostream& out) const{
     out << "@comm " << Channels.size() <<"\n";
     for(COM c : Channels){
         c.printCOM(out,Hardwares);
     }
 }
 
-void Cost_List::printProc(std::ostream& out) const{
+void TaskSchedulerSimulator::printProc(std::ostream& out) const{
     out << "@proc " << Hardwares.size() << std::endl;
     for (Hardware h : Hardwares) {
         h.printHW(out);
@@ -114,7 +114,7 @@ void Cost_List::printProc(std::ostream& out) const{
     }
 }
 
-void Cost_List::printConditions(std::ostream& out) const{
+void TaskSchedulerSimulator::printConditions(std::ostream& out) const{
 
     out << "@conditions " << std::endl;
     
@@ -126,7 +126,7 @@ void Cost_List::printConditions(std::ostream& out) const{
 
 
 
-void Cost_List::printToGantt(std::string filename){
+void TaskSchedulerSimulator::printToGantt(std::string filename){
     std::ofstream outputFile(filename, std::ofstream::trunc);
     if (outputFile.is_open()) {
         for(int t = 0; t<tasks_amount;t++){
@@ -161,7 +161,7 @@ void Cost_List::printToGantt(std::string filename){
 
 }
 
-void Cost_List::printInstances() {
+void TaskSchedulerSimulator::printInstances() {
     std::sort(Instances.begin(), Instances.end());
     tasks_amount = TaskGraph.getVerticesSize();
     std::cout << "Stworzono " << Instances.size() << " komponentów\n";
@@ -214,11 +214,11 @@ void Cost_List::printInstances() {
     std::cout << "\tKoszt całkowity instancji: " << totalCostOfInstances << std::endl;
 }
 
-void Cost_List::printTotalCost() {
+void TaskSchedulerSimulator::printTotalCost() {
     std::cout << "Całkowity koszt systemu z uwzględnieniem kary: " << totalCost << std::endl;
 }
 
-void Cost_List::printUnpredictedTasks(){
+void TaskSchedulerSimulator::printUnpredictedTasks(){
 
     if(unpredictedTasks.size() > 0){
         std::cout <<"Nieprzewidziane zadania to: ";

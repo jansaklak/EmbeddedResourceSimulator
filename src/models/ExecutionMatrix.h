@@ -6,7 +6,8 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
-#include "Graf.h"
+#include "TaskGraph.h"
+#include "HardwareProcessor.h"
 
 /**
  * @brief Manages the matrices of execution times t(T, H) and costs c(T, H) for tasks on hardware processors.

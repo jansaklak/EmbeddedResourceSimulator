@@ -179,8 +179,6 @@ void TaskSchedulerSimulator::scheduleTwoPhaseRefined() {
 // S8: Optymalizacja Kosztowo-Czasowa z Funkcją Kary (Constrained Penalty Optimization)
 void TaskSchedulerSimulator::scheduleConstrainedPenaltyOptimization() {
     int LOOP_COUNTER = 3;
-    int HARD_TIME = 250;
-    int PUNISHMENT = 2;
 
     std::vector<int> bfs_tasks = TaskGraph.BFS();
     std::vector<int> tasks_visited_count(TaskGraph.getVerticesSize(), LOOP_COUNTER);
@@ -195,7 +193,9 @@ void TaskSchedulerSimulator::scheduleConstrainedPenaltyOptimization() {
                 break;
             }
         }
-        createInstance(currTask);
+        if (allocated_tasks[currTask] == 0) {
+            createInstance(currTask);
+        }
     }
 
     int possibleMoves = 0;
@@ -234,7 +234,7 @@ void TaskSchedulerSimulator::scheduleConstrainedPenaltyOptimization() {
         printSchedule();
 
         int totalTime = getCriticalTime();
-        if (totalTime > HARD_TIME) {
+        if (totalTime > hard_time) {
             totalCost = 0;
             for (HardwareInstance* instance : Instances) {
                 totalCost += instance->getHardwarePtr()->getCost();
@@ -242,7 +242,7 @@ void TaskSchedulerSimulator::scheduleConstrainedPenaltyOptimization() {
                     totalCost += times.getCost(taskID, instance->getHardwarePtr());
                 }
             }
-            totalCost += (totalTime - HARD_TIME) * PUNISHMENT;
+            totalCost += (totalTime - hard_time) * penalty_factor;
         }
 
         criticalTimeResults.pop_front();
@@ -379,7 +379,9 @@ void TaskSchedulerSimulator::scheduleNormalizedPackingBfs() {
                 break;
             }
         }
-        createInstance(currTask);
+        if (allocated_tasks[currTask] == 0) {
+            createInstance(currTask);
+        }
     }
 }
 

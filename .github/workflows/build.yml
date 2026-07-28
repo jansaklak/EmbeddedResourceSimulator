@@ -1,0 +1,32 @@
+name: Build & Test Embedded Resource Simulator
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up C++ Compiler & Make
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential g++ make python3
+
+    - name: Build C++ Binary
+      run: make clean && make
+
+    - name: Run C++ Unit Test Suite
+      run: make test
+
+    - name: Verify CLI Execution & JSON Export
+      run: |
+        ./main --list-data
+        ./main --export-json data/graph20.dat 8 > output.json
+        head -n 20 output.json

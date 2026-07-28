@@ -178,6 +178,35 @@ class EmbeddedSimulatorHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(results).encode('utf-8'))
             return
 
+        elif parsed.path == '/api/benchmark-csv':
+            results = req_json.get('results', [])
+            strat_names = {
+                1: 'S1: Najszybsza Dedykowana',
+                2: 'S2: Najtańsza Dedykowana',
+                3: 'S3: Najszybsza z Upakowywaniem',
+                5: 'S5: Poziomowa BFS',
+                6: 'S6: Zachłanna Ścieżki Krytycznej',
+                7: 'S7: Hybrydowa z Rafinacją',
+                8: 'S8: Optymalizacja z Funkcją Kary',
+                9: 'S9: Monolityczna Baseline'
+            }
+            csv_lines = ['Strategy,StrategyName,CriticalTime_ms,TotalCost_PLN,ActiveInstances']
+            for r in results:
+                s_id = r.get('strategy', 0)
+                name = strat_names.get(s_id, f'S{s_id}')
+                ctime = r.get('criticalTime', 0)
+                cost = r.get('totalCost', 0)
+                hw = r.get('hardwareCount', 0)
+                csv_lines.append(f'{s_id},"{name}",{ctime},{cost},{hw}')
+
+            csv_data = '\n'.join(csv_lines)
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv; charset=utf-8')
+            self.send_header('Content-Disposition', 'attachment; filename="benchmark_results.csv"')
+            self.end_headers()
+            self.wfile.write(csv_data.encode('utf-8'))
+            return
+
         elif parsed.path == '/api/save-file':
             filename = req_json.get('filename', '').strip()
             content = req_json.get('content', '')

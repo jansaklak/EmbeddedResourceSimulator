@@ -1,6 +1,31 @@
 let currentMode = 'file';
 let currentSimData = null;
 let currentFileList = [];
+let benchmarkRunning = false;
+let lastBenchmarkResults = null;
+
+let dagZoomScale = 1.0;
+let dagCustomNodeCoords = {};
+let isDraggingDagNode = false;
+let draggedNodeId = null;
+
+function zoomDag(delta) {
+  dagZoomScale = Math.min(3.0, Math.max(0.3, dagZoomScale + delta));
+  const zoomVal = document.getElementById('dagZoomVal');
+  if (zoomVal) zoomVal.textContent = Math.round(dagZoomScale * 100) + '%';
+  const containerGroup = document.getElementById('dagContainerGroup');
+  if (containerGroup) {
+    containerGroup.setAttribute('transform', `scale(${dagZoomScale})`);
+  }
+}
+
+function resetDagZoom() {
+  dagZoomScale = 1.0;
+  dagCustomNodeCoords = {};
+  const zoomVal = document.getElementById('dagZoomVal');
+  if (zoomVal) zoomVal.textContent = '100%';
+  renderDag();
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadFileList();
@@ -131,7 +156,16 @@ async function runSimulation() {
     const activeInstancesCount = data.activeInstancesCount !== undefined 
       ? data.activeInstancesCount 
       : (new Set((data.schedule || []).map(s => s.unit).filter(Boolean)).size);
-    document.getElementById('quickInstances').textContent = `${activeInstancesCount} instancji`;
+      
+    if (document.getElementById('quickCritTime')) {
+      document.getElementById('quickCritTime').textContent = `${data.criticalTime !== undefined ? data.criticalTime : 0} ms`;
+    }
+    if (document.getElementById('quickTotalCost')) {
+      document.getElementById('quickTotalCost').textContent = `${data.totalCost !== undefined ? data.totalCost : 0} PLN`;
+    }
+    if (document.getElementById('quickInstances')) {
+      document.getElementById('quickInstances').textContent = `${activeInstancesCount} instancji`;
+    }
 
     // Keep live strategy selector in sync
     const liveSelect = document.getElementById('liveStrategySelect');
@@ -464,21 +498,35 @@ function renderDag() {
   if (!svg) return;
   svg.innerHTML = '';
 
-  const tasks = currentSimData.tasks;
-  const numTasks = tasks.length;
-  if (numTasks === 0) return;
-
-  // Add marker defs for arrowheads
+  // Create defs for arrow markers (blue normal & red critical)
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = `
-    <marker id="arrow" viewBox="0 0 10 10" refX="26" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
     </marker>
-    <marker id="arrow-active" viewBox="0 0 10 10" refX="26" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
     </marker>
   `;
   svg.appendChild(defs);
+
+  // Main container group for zooming
+  const containerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  containerGroup.setAttribute('id', 'dagContainerGroup');
+  containerGroup.setAttribute('transform', `scale(${dagZoomScale})`);
+  containerGroup.style.transformOrigin = '0 0';
+  svg.appendChild(containerGroup);
+
+  // Mouse wheel zoom event
+  svg.onwheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    zoomDag(delta);
+  };
+
+  const tasks = currentSimData.tasks;
+  const numTasks = tasks.length;
+  if (numTasks === 0) return;
 
   // Layered topological layout algorithm
   const layers = [];
@@ -538,8 +586,8 @@ function renderDag() {
   const totalWidth = Math.max(900, layers.length * layerWidth + 180);
   const totalHeight = Math.max(500, maxLayerSize * nodeHeight + 140);
 
-  svg.setAttribute('width', totalWidth);
-  svg.setAttribute('height', totalHeight);
+  svg.setAttribute('width', totalWidth * Math.max(1, dagZoomScale));
+  svg.setAttribute('height', totalHeight * Math.max(1, dagZoomScale));
   svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
 
   layers.forEach((layer, layerIdx) => {
@@ -548,10 +596,111 @@ function renderDag() {
     const startY = (totalHeight - layerH) / 2 + 35;
 
     layer.forEach((nodeId, idx) => {
-      const y = startY + idx * nodeHeight;
-      nodeCoords[nodeId] = { x, y };
+      const defaultY = startY + idx * nodeHeight;
+      if (dagCustomNodeCoords[nodeId]) {
+        nodeCoords[nodeId] = { ...dagCustomNodeCoords[nodeId] };
+      } else {
+        nodeCoords[nodeId] = { x, y: defaultY };
+      }
     });
   });
+
+  // Calculate Critical Path before rendering
+  const isCritPathChecked = document.getElementById('chkCriticalPath')?.checked;
+  const critPathTasks = new Set();
+  const critPathEdges = new Set();
+
+  if (isCritPathChecked && currentSimData && currentSimData.schedule && currentSimData.schedule.length > 0) {
+    const schedMap = {};
+    currentSimData.schedule.forEach(s => {
+      const tid = s.taskId !== undefined ? s.taskId : s.task_id;
+      schedMap[tid] = s;
+    });
+
+    const maxEnd = currentSimData.criticalTime || Math.max(...currentSimData.schedule.map(s => s.endTime));
+    
+    // Find all sink tasks ending at or near the max critical time
+    let frontier = currentSimData.schedule
+      .filter(s => s.endTime >= maxEnd - 1)
+      .map(s => (s.taskId !== undefined ? s.taskId : s.task_id));
+    
+    if (frontier.length === 0) {
+      let bestTid = -1, maxT = -1;
+      currentSimData.schedule.forEach(s => {
+        if (s.endTime > maxT) {
+          maxT = s.endTime;
+          bestTid = s.taskId !== undefined ? s.taskId : s.task_id;
+        }
+      });
+      if (bestTid !== -1) frontier.push(bestTid);
+    }
+
+    frontier.forEach(id => critPathTasks.add(id));
+
+    const visitedFrontier = new Set(frontier);
+
+    while (frontier.length > 0) {
+      const nextFrontier = [];
+      frontier.forEach(vId => {
+        const vSched = schedMap[vId];
+        if (!vSched) return;
+
+        // Find the predecessor u (with edge u -> v) that finishes latest among all predecessors of v
+        let bestPreds = [];
+        let maxPredEndTime = -1;
+
+        tasks.forEach(uTask => {
+          const uId = uTask.id;
+          const uSched = schedMap[uId];
+          if (!uSched || uId === vId) return;
+
+          const hasEdge = (uTask.outEdges || []).some(e => e.target === vId);
+          if (hasEdge) {
+            if (uSched.endTime > maxPredEndTime) {
+              maxPredEndTime = uSched.endTime;
+              bestPreds = [uId];
+            } else if (uSched.endTime === maxPredEndTime) {
+              bestPreds.push(uId);
+            }
+          }
+        });
+
+        // Add latest-finishing predecessors to critical path
+        bestPreds.forEach(uId => {
+          critPathTasks.add(uId);
+          critPathEdges.add(`${uId}->${vId}`);
+          if (!visitedFrontier.has(uId)) {
+            visitedFrontier.add(uId);
+            nextFrontier.push(uId);
+          }
+        });
+      });
+
+      frontier = nextFrontier;
+    }
+  }
+
+  // Update Critical Path Info Banner
+  const critChainEl = document.getElementById('critPathChain');
+  const critBannerEl = document.getElementById('critPathBanner');
+
+  if (isCritPathChecked && critPathTasks.size > 0 && currentSimData && currentSimData.schedule) {
+    if (critBannerEl) critBannerEl.style.display = 'flex';
+    const sortedCritTasks = Array.from(critPathTasks).sort((a, b) => {
+      const sA = (currentSimData.schedule.find(x => (x.taskId !== undefined ? x.taskId : x.task_id) === a)?.startTime || 0);
+      const sB = (currentSimData.schedule.find(x => (x.taskId !== undefined ? x.taskId : x.task_id) === b)?.startTime || 0);
+      return sA - sB;
+    });
+
+    if (critChainEl) {
+      critChainEl.innerHTML = sortedCritTasks
+        .map(id => `<span class="badge" style="background:#ef4444; color:#fff; padding:0.25rem 0.6rem; border-radius:6px; font-size:0.85rem; box-shadow:0 0 6px rgba(239,68,68,0.5);">T${id}</span>`)
+        .join('<span style="color:#ef4444; margin:0 0.2rem; font-weight:bold;">➔</span>') + 
+        `<span style="margin-left:0.75rem; color:#fca5a5; font-size:0.8rem; font-weight:normal;">(Czas wykonania: ${currentSimData.criticalTime || 0} ms)</span>`;
+    }
+  } else {
+    if (critBannerEl) critBannerEl.style.display = 'none';
+  }
 
   // Render Edges
   tasks.forEach(t => {
@@ -562,57 +711,77 @@ function renderDag() {
       const target = nodeCoords[e.target];
       if (target) {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('id', `dag-edge-${t.id}-${e.target}`);
         line.setAttribute('x1', source.x);
         line.setAttribute('y1', source.y);
         line.setAttribute('x2', target.x);
         line.setAttribute('y2', target.y);
-        line.setAttribute('stroke', '#38bdf8');
-        line.setAttribute('stroke-width', '3');
-        line.setAttribute('stroke-dasharray', '6 3');
-        line.setAttribute('marker-end', 'url(#arrow)');
+
+        const isCritEdge = isCritPathChecked && critPathEdges.has(`${t.id}->${e.target}`);
+        if (isCritEdge) {
+          line.setAttribute('stroke', '#ef4444');
+          line.setAttribute('stroke-width', '5');
+          line.setAttribute('marker-end', 'url(#arrow-red)');
+          line.setAttribute('style', 'filter: drop-shadow(0 0 6px #ef4444);');
+        } else {
+          line.setAttribute('stroke', '#38bdf8');
+          line.setAttribute('stroke-width', '3');
+          line.setAttribute('stroke-dasharray', '6 3');
+          line.setAttribute('marker-end', 'url(#arrow)');
+        }
         line.setAttribute('class', 'dag-edge');
 
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent = `T${t.id} → T${e.target} (Koszt comm: ${e.weight})`;
+        title.textContent = `T${t.id} → T${e.target} (Koszt comm: ${e.weight})${isCritEdge ? ' 🔴 ŚCIEŻKA KRYTYCZNA' : ''}`;
         line.appendChild(title);
 
-        svg.appendChild(line);
+        containerGroup.appendChild(line);
       }
     });
   });
 
-  // Render Nodes
+  // Render Nodes with Drag & Drop
   tasks.forEach(t => {
     const coord = nodeCoords[t.id];
     if (!coord) return;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('id', `dag-node-g-${t.id}`);
     g.setAttribute('transform', `translate(${coord.x}, ${coord.y})`);
+    g.style.cursor = 'grab';
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', '0');
     circle.setAttribute('cy', '0');
     circle.setAttribute('r', '22');
     
-    let fillColor = '#0284c7';   // Vibrant Blue
-    let strokeColor = '#38bdf8'; // Light cyan border
-    if (t.isConditional) {
-      fillColor = '#db2777';   // Vibrant Pink
-      strokeColor = '#f472b6'; // Light pink border
+    let fillColor = '#0284c7';
+    let strokeColor = '#38bdf8';
+    let strokeWidth = '3.5';
+
+    if (isCritPathChecked && critPathTasks.has(t.id)) {
+      fillColor = '#dc2626';   // Vibrant Crimson Red fill!
+      strokeColor = '#f87171'; // Bright Red border!
+      strokeWidth = '6';
+      circle.setAttribute('style', 'filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.9));');
+    } else if (t.isConditional) {
+      fillColor = '#db2777';
+      strokeColor = '#f472b6';
     } else if (t.isUnpredicted) {
-      fillColor = '#d97706';   // Vibrant Amber
-      strokeColor = '#fbbf24'; // Light yellow border
+      fillColor = '#d97706';
+      strokeColor = '#fbbf24';
     }
 
     circle.setAttribute('fill', fillColor);
     circle.setAttribute('stroke', strokeColor);
-    circle.setAttribute('stroke-width', '3.5');
+    circle.setAttribute('stroke-width', strokeWidth);
     circle.setAttribute('class', 'dag-node');
 
     const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
     let nodeInfo = `Zadanie T${t.id}`;
     if (t.isConditional) nodeInfo += `\nWarunek: ${t.condition || 'TAK'}`;
     if (t.isUnpredicted) nodeInfo += `\nNieprzewidziane`;
+    if (isCritPathChecked && critPathTasks.has(t.id)) nodeInfo += `\n🔴 NALEŻY DO ŚCIEŻKI KRYTYCZNEJ`;
     title.textContent = nodeInfo;
     g.appendChild(title);
 
@@ -627,15 +796,83 @@ function renderDag() {
     text.setAttribute('dominant-baseline', 'central');
     text.setAttribute('alignment-baseline', 'middle');
     text.setAttribute('dy', '0.3em');
+    text.style.pointerEvents = 'none';
     text.textContent = `T${t.id}`;
 
     g.appendChild(circle);
     g.appendChild(text);
-    svg.appendChild(g);
+
+    // Drag mousedown listener
+    g.onmousedown = (evt) => {
+      evt.preventDefault();
+      isDraggingDagNode = true;
+      draggedNodeId = t.id;
+      g.style.cursor = 'grabbing';
+    };
+
+    containerGroup.appendChild(g);
   });
+
+  // Global SVG Drag Move and Up listeners
+  svg.onmousemove = (evt) => {
+    if (!isDraggingDagNode || draggedNodeId === null) return;
+    const rect = svg.getBoundingClientRect();
+    const mouseX = (evt.clientX - rect.left) / dagZoomScale;
+    const mouseY = (evt.clientY - rect.top) / dagZoomScale;
+
+    // Update node coords
+    dagCustomNodeCoords[draggedNodeId] = { x: mouseX, y: mouseY };
+
+    // Move node g element
+    const gEl = document.getElementById(`dag-node-g-${draggedNodeId}`);
+    if (gEl) gEl.setAttribute('transform', `translate(${mouseX}, ${mouseY})`);
+
+    // Update outgoing edges from draggedNodeId
+    const draggedTask = tasks.find(x => x.id === draggedNodeId);
+    if (draggedTask && draggedTask.outEdges) {
+      draggedTask.outEdges.forEach(e => {
+        const line = document.getElementById(`dag-edge-${draggedNodeId}-${e.target}`);
+        if (line) {
+          line.setAttribute('x1', mouseX);
+          line.setAttribute('y1', mouseY);
+        }
+      });
+    }
+
+    // Update incoming edges to draggedNodeId
+    tasks.forEach(uTask => {
+      (uTask.outEdges || []).forEach(e => {
+        if (e.target === draggedNodeId) {
+          const line = document.getElementById(`dag-edge-${uTask.id}-${draggedNodeId}`);
+          if (line) {
+            line.setAttribute('x2', mouseX);
+            line.setAttribute('y2', mouseY);
+          }
+        }
+      });
+    });
+  };
+
+  svg.onmouseup = () => {
+    if (isDraggingDagNode) {
+      if (draggedNodeId !== null) {
+        const gEl = document.getElementById(`dag-node-g-${draggedNodeId}`);
+        if (gEl) gEl.style.cursor = 'grab';
+      }
+      isDraggingDagNode = false;
+      draggedNodeId = null;
+    }
+  };
 }
 
-async function runBenchmark() {
+async function runBenchmark(force = false) {
+  if (benchmarkRunning) return;
+  if (!force && lastBenchmarkResults && lastBenchmarkResults.length > 0) {
+    renderBenchmarkResults(lastBenchmarkResults);
+    return;
+  }
+
+  benchmarkRunning = true;
   const filename = document.getElementById('fileSelect').value || 'graph20.dat';
 
   const statusBox = document.getElementById('benchmarkStatusBox');
@@ -666,51 +903,55 @@ async function runBenchmark() {
   const results = [];
   const totalStrats = stratList.length;
 
-  for (let i = 0; i < totalStrats; i++) {
-    const s = stratList[i];
-    const pct = Math.round(((i + 1) / totalStrats) * 100);
-    if (progressBar) progressBar.style.width = `${pct}%`;
-    if (statusText) statusText.textContent = `⏳ [${i + 1}/${totalStrats}] Testowanie: ${s.name}...`;
-    logConsole(`⏳ [${i + 1}/${totalStrats}] Wykonywanie symulacji dla ${s.name} (ID: ${s.id})...`);
+  try {
+    for (let i = 0; i < totalStrats; i++) {
+      const s = stratList[i];
+      const pct = Math.round(((i + 1) / totalStrats) * 100);
+      if (progressBar) progressBar.style.width = `${pct}%`;
+      if (statusText) statusText.textContent = `⏳ [${i + 1}/${totalStrats}] Testowanie: ${s.name}...`;
+      logConsole(`⏳ [${i + 1}/${totalStrats}] Wykonywanie symulacji dla ${s.name} (ID: ${s.id})...`);
 
-    try {
-      const payload = { strategy: s.id, random: false, filename };
-      const res = await fetch('/api/run-simulation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!data.error) {
-        const activeCount = data.activeInstancesCount !== undefined 
-          ? data.activeInstancesCount 
-          : (new Set((data.schedule || []).map(x => x.unit).filter(Boolean)).size);
-        const resObj = {
-          strategy: s.id,
-          name: s.name,
-          criticalTime: data.criticalTime,
-          totalCost: data.totalCost,
-          hardwareCount: activeCount
-        };
-        results.push(resObj);
-        logConsole(`  ✅ ${s.name} -> Czas Krytyczny: ${data.criticalTime} ms | Koszt Total: ${data.totalCost} PLN | Instancji HW: ${resObj.hardwareCount}`);
-        renderBenchmarkResults(results);
-      } else {
-        logConsole(`  ❌ Błąd dla ${s.name}: ${data.error}`);
+      try {
+        const payload = { strategy: s.id, random: false, filename };
+        const res = await fetch('/api/run-simulation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.error) {
+          const activeCount = data.activeInstancesCount !== undefined 
+            ? data.activeInstancesCount 
+            : (new Set((data.schedule || []).map(x => x.unit).filter(Boolean)).size);
+          const resObj = {
+            strategy: s.id,
+            name: s.name,
+            criticalTime: data.criticalTime,
+            totalCost: data.totalCost,
+            hardwareCount: activeCount
+          };
+          results.push(resObj);
+          logConsole(`  ✅ ${s.name} -> Czas Krytyczny: ${data.criticalTime} ms | Koszt Total: ${data.totalCost} PLN | Instancji HW: ${resObj.hardwareCount}`);
+          renderBenchmarkResults(results);
+        } else {
+          logConsole(`  ❌ Błąd dla ${s.name}: ${data.error}`);
+        }
+      } catch (err) {
+        logConsole(`  ❌ Błąd komunikacji dla ${s.name}: ${err.message}`);
       }
-    } catch (err) {
-      logConsole(`  ❌ Błąd komunikacji dla ${s.name}: ${err.message}`);
     }
+
+    lastBenchmarkResults = results;
+    if (statusText) statusText.textContent = `✅ Benchmark ukończony! Przeanalizowano wszystkie ${results.length} strategii.`;
+    logConsole(`=======================================================`);
+    logConsole(`🏆 BENCHMARK ZAKOŃCZONY SUKCESEM dla ${results.length} strategii.`);
+    logConsole(`=======================================================`);
+  } finally {
+    benchmarkRunning = false;
+    setTimeout(() => {
+      if (statusBox) statusBox.classList.add('hidden');
+    }, 4000);
   }
-
-  if (statusText) statusText.textContent = `✅ Benchmark ukończony! Przeanalizowano wszystkie ${results.length} strategii.`;
-  logConsole(`=======================================================`);
-  logConsole(`🏆 BENCHMARK ZAKOŃCZONY SUKCESEM dla ${results.length} strategii.`);
-  logConsole(`=======================================================`);
-
-  setTimeout(() => {
-    if (statusBox) statusBox.classList.add('hidden');
-  }, 4000);
 }
 
 function renderBenchmarkResults(results) {
@@ -767,6 +1008,219 @@ function renderBenchmarkResults(results) {
   });
 }
 
+async function downloadBenchmarkCSV() {
+  if (!lastBenchmarkResults || lastBenchmarkResults.length === 0) {
+    logConsole("Brak wyników benchmarku do wyeksportowania. Uruchom najpierw benchmark.");
+    return;
+  }
+  try {
+    const res = await fetch('/api/benchmark-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results: lastBenchmarkResults })
+    });
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'benchmark_results.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    logConsole("Pobrano plik benchmark_results.csv");
+  } catch (err) {
+    logConsole("Błąd pobierania pliku CSV: " + err.message);
+  }
+}
+
+function exportGanttPNG() {
+  const chart = document.getElementById('ganttChart');
+  if (!chart) return;
+
+  // Use HTML Canvas to render SVG/HTML Gantt chart
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const width = Math.max(800, chart.scrollWidth + 40);
+  const height = Math.max(300, chart.scrollHeight + 40);
+
+  canvas.width = width;
+  canvas.height = height;
+
+  ctx.fillStyle = '#0b0f19';
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '16px sans-serif';
+  ctx.fillText('Embedded Resource Simulator — Harmonogram Gantta', 20, 30);
+
+  // Render Gantt rows onto canvas
+  const rows = chart.querySelectorAll('.gantt-row');
+  let y = 60;
+  rows.forEach((row, i) => {
+    const label = row.querySelector('.gantt-label')?.textContent || '';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(label, 20, y + 20);
+
+    const bars = row.querySelectorAll('.gantt-bar');
+    bars.forEach(bar => {
+      const left = parseFloat(bar.style.left) || 0;
+      const w = parseFloat(bar.style.width) || 40;
+      const text = bar.textContent || '';
+
+      ctx.fillStyle = bar.classList.contains('conditional') ? '#db2777' :
+                      bar.classList.contains('unpredicted') ? '#d97706' : '#0284c7';
+      ctx.fillRect(160 + left, y, w, 28);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(160 + left, y, w, 28);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(text, 160 + left + 4, y + 18);
+    });
+
+    y += 40;
+  });
+
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'gantt_chart.png';
+  a.click();
+  logConsole("Wyeksportowano wykres Gantta do pliku gantt_chart.png");
+}
+
+function renderMatrices() {
+  const fileText = document.getElementById('fileEditorTextarea').value || '';
+  const timesCont = document.getElementById('matrixTimesContainer');
+  const costsCont = document.getElementById('matrixCostsContainer');
+
+  if (!timesCont || !costsCont) return;
+
+  const parseSection = (tag) => {
+    const start = fileText.indexOf(tag);
+    if (start === -1) return [];
+    const lines = fileText.substring(start).split('\n');
+    const matrix = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('@') || line === '') break;
+      const nums = line.split(/\s+/).map(Number).filter(n => !isNaN(n));
+      if (nums.length > 0) matrix.push(nums);
+    }
+    return matrix;
+  };
+
+  const timesMatrix = parseSection('@times');
+  const costsMatrix = parseSection('@cost');
+
+  const buildHeatmapTable = (matrix, unitLabel) => {
+    if (!matrix || matrix.length === 0) return '<div style="color: var(--text-muted);">Brak danych macierzy</div>';
+    let allVals = matrix.flat();
+    let minVal = Math.min(...allVals);
+    let maxVal = Math.max(...allVals);
+    let range = maxVal - minVal || 1;
+
+    let html = '<table style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.8rem; margin-top: 0.5rem;">';
+    html += '<thead><tr style="border-bottom: 1px solid var(--border-color);"><th style="padding: 6px;">T \\ HW</th>';
+    const colsCount = matrix[0].length;
+    for (let j = 0; j < colsCount; j++) {
+      html += `<th style="padding: 6px; color: var(--primary);">HW${j}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    matrix.forEach((row, i) => {
+      html += `<tr><td style="padding: 6px; font-weight: bold; color: var(--accent-purple);">T${i}</td>`;
+      row.forEach(val => {
+        let norm = (val - minVal) / range;
+        let bg = `rgba(6, 182, 212, ${0.1 + norm * 0.45})`;
+        html += `<td style="padding: 6px; text-align: center; background: ${bg}; border: 1px solid rgba(255,255,255,0.05);">${val}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  };
+
+  timesCont.innerHTML = buildHeatmapTable(timesMatrix, 'ms');
+  costsCont.innerHTML = buildHeatmapTable(costsMatrix, 'PLN');
+}
+
+async function renderCompareView() {
+  const stratA = parseInt(document.getElementById('compareStratA').value, 10);
+  const stratB = parseInt(document.getElementById('compareStratB').value, 10);
+  const filename = document.getElementById('fileSelect').value || 'graph20.dat';
+
+  const stratNames = {
+    1: 'S1: Najszybsza Dedykowana', 2: 'S2: Najtańsza Dedykowana', 3: 'S3: Upakowywanie Instancji',
+    5: 'S5: BFS', 6: 'S6: Ścieżka Krytyczna', 7: 'S7: Dwuetapowa Rafinacja',
+    8: 'S8: Optymalizacja z Kary', 9: 'S9: Single Core Baseline'
+  };
+
+  document.getElementById('compareTitleA').textContent = `${stratNames[stratA]} (S${stratA})`;
+  document.getElementById('compareTitleB').textContent = `${stratNames[stratB]} (S${stratB})`;
+
+  try {
+    const [resA, resB] = await Promise.all([
+      fetch('/api/run-simulation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ strategy: stratA, filename }) }).then(r => r.json()),
+      fetch('/api/run-simulation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ strategy: stratB, filename }) }).then(r => r.json())
+    ]);
+
+    const renderMiniStats = (data, elId) => {
+      const container = document.getElementById(elId);
+      const activeCount = data.activeInstancesCount !== undefined ? data.activeInstancesCount : (new Set((data.schedule || []).map(s => s.unit).filter(Boolean)).size);
+      container.innerHTML = `
+        <div class="stat-box"><span class="stat-label">Czas Krytyczny</span><span class="stat-value">${data.criticalTime || 0} ms</span></div>
+        <div class="stat-box"><span class="stat-label">Koszt Total</span><span class="stat-value highlight">${data.totalCost || 0} PLN</span></div>
+        <div class="stat-box"><span class="stat-label">Instancje HW</span><span class="stat-value">${activeCount}</span></div>
+      `;
+    };
+
+    renderMiniStats(resA, 'compareStatsA');
+    renderMiniStats(resB, 'compareStatsB');
+
+    const renderMiniGantt = (data, containerId) => {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      const scale = 2;
+      const criticalTime = data.criticalTime || 100;
+      const unitsMap = {};
+      (data.schedule || []).forEach(item => {
+        const u = item.unit || 'HW';
+        if (!unitsMap[u]) unitsMap[u] = [];
+        unitsMap[u].push(item);
+      });
+
+      Object.keys(unitsMap).sort().forEach(unitName => {
+        const row = document.createElement('div');
+        row.className = 'gantt-row';
+        row.innerHTML = `<div class="gantt-label" style="width: 70px; font-size: 0.75rem;">${unitName}</div>`;
+        const track = document.createElement('div');
+        track.className = 'gantt-track';
+        track.style.width = `${criticalTime * scale}px`;
+
+        unitsMap[unitName].forEach(t => {
+          const bar = document.createElement('div');
+          bar.className = 'gantt-bar';
+          bar.style.left = `${t.startTime * scale}px`;
+          bar.style.width = `${Math.max((t.endTime - t.startTime) * scale, 18)}px`;
+          bar.textContent = `T${t.taskId}`;
+          track.appendChild(bar);
+        });
+
+        row.appendChild(track);
+        container.appendChild(row);
+      });
+    };
+
+    renderMiniGantt(resA, 'compareGanttA');
+    renderMiniGantt(resB, 'compareGanttB');
+
+  } catch (err) {
+    logConsole("Błąd porównywania strategii: " + err.message);
+  }
+}
+
 function switchView(viewName) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
@@ -783,10 +1237,18 @@ function switchView(viewName) {
     document.querySelector("button[onclick=\"switchView('dag')\"]").classList.add('active');
     document.getElementById('viewDag').classList.add('active');
     renderDag();
+  } else if (viewName === 'matrices') {
+    document.querySelector("button[onclick=\"switchView('matrices')\"]").classList.add('active');
+    document.getElementById('viewMatrices').classList.add('active');
+    renderMatrices();
   } else if (viewName === 'benchmark') {
     document.querySelector("button[onclick=\"switchView('benchmark')\"]").classList.add('active');
     document.getElementById('viewBenchmark').classList.add('active');
-    runBenchmark();
+    runBenchmark(false);
+  } else if (viewName === 'compare') {
+    document.querySelector("button[onclick=\"switchView('compare')\"]").classList.add('active');
+    document.getElementById('viewCompare').classList.add('active');
+    renderCompareView();
   } else if (viewName === 'editor') {
     document.querySelector("button[onclick=\"switchView('editor')\"]").classList.add('active');
     document.getElementById('viewEditor').classList.add('active');

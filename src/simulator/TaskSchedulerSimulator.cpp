@@ -11,18 +11,18 @@
 #include <regex>
 
 
-std::vector<Hardware> Cost_List::getHardwares() const{
+std::vector<Hardware> TaskSchedulerSimulator::getHardwares() const{
     return Hardwares;
 }
 
-std::vector<COM> Cost_List::getCOMS() const{
+std::vector<COM> TaskSchedulerSimulator::getCOMS() const{
     return Channels;
 }
 
-Graf Cost_List::getGraph() const{
+Graf TaskSchedulerSimulator::getGraph() const{
     return TaskGraph;
 }
-Times Cost_List::getTimes() const{
+Times TaskSchedulerSimulator::getTimes() const{
     return times;
 }
 
@@ -37,8 +37,9 @@ TaskSchedulerSimulator::TaskSchedulerSimulator(TaskSchedulerSimulator&& other) n
     hardware_cores_amount = other.hardware_cores_amount;
     processing_unit_amount = other.processing_unit_amount;
     channels_amount = other.channels_amount;
-    TotalCost = other.TotalCost;
     simulation_time_scale = other.simulation_time_scale;
+    hard_time = other.hard_time;
+    penalty_factor = other.penalty_factor;
     Hardwares = std::move(other.Hardwares);
     Channels = std::move(other.Channels);
     allocated_tasks = std::move(other.allocated_tasks);
@@ -50,6 +51,7 @@ TaskSchedulerSimulator::TaskSchedulerSimulator(TaskSchedulerSimulator&& other) n
     HWInstancesCount = std::move(other.HWInstancesCount);
     taskInstanceMap = std::move(other.taskInstanceMap);
     task_schedule = std::move(other.task_schedule);
+    startingTimeCache = std::move(other.startingTimeCache);
     conditions = std::move(other.conditions);
     conditionTaskMap = std::move(other.conditionTaskMap);
     subTaskHW = std::move(other.subTaskHW);
@@ -71,8 +73,9 @@ TaskSchedulerSimulator& TaskSchedulerSimulator::operator=(TaskSchedulerSimulator
         hardware_cores_amount = other.hardware_cores_amount;
         processing_unit_amount = other.processing_unit_amount;
         channels_amount = other.channels_amount;
-        TotalCost = other.TotalCost;
         simulation_time_scale = other.simulation_time_scale;
+        hard_time = other.hard_time;
+        penalty_factor = other.penalty_factor;
         Hardwares = std::move(other.Hardwares);
         Channels = std::move(other.Channels);
         allocated_tasks = std::move(other.allocated_tasks);
@@ -84,6 +87,7 @@ TaskSchedulerSimulator& TaskSchedulerSimulator::operator=(TaskSchedulerSimulator
         HWInstancesCount = std::move(other.HWInstancesCount);
         taskInstanceMap = std::move(other.taskInstanceMap);
         task_schedule = std::move(other.task_schedule);
+        startingTimeCache = std::move(other.startingTimeCache);
         conditions = std::move(other.conditions);
         conditionTaskMap = std::move(other.conditionTaskMap);
         subTaskHW = std::move(other.subTaskHW);
@@ -104,16 +108,18 @@ TaskSchedulerSimulator::TaskSchedulerSimulator(){
     processing_unit_amount = 0;
     channels_amount = 0;
     with_cost = 0;
+    totalCost = 0;
+    simulation_time_scale = 1;
     clear();
 }
 
 TaskSchedulerSimulator::TaskSchedulerSimulator(int _tasks, int _hcores, int _punits, int _channels, int _withCost)
-    : with_cost(_withCost), tasks_amount(_tasks), hardware_cores_amount(_hcores),
-    processing_unit_amount(_punits), channels_amount(_channels) {
+    : with_cost(_withCost), totalCost(0), tasks_amount(_tasks), hardware_cores_amount(_hcores),
+    processing_unit_amount(_punits), channels_amount(_channels), simulation_time_scale(1) {
         clear();
 }
 
-void Cost_List::clear(){
+void TaskSchedulerSimulator::clear(){
     for (Instance* inst : Instances) {
         delete inst;
     }
@@ -132,23 +138,24 @@ void Cost_List::clear(){
     conditionalTasks.clear();
     extendedTasks.clear();
     subTaskHW.clear();
+    invalidateStartingTimeCache();
 }
 
 
-void Cost_List::clearNUM(){
-    int tasks_amount = 0;
-    int hardware_cores_amount = 0;
-    int processing_unit_amount = 0;
-    int channels_amount = 0;
-    bool with_cost = 0;
-    int TotalCost = 0;
-    int simulation_time_scale = 0;
+void TaskSchedulerSimulator::clearNUM(){
+    tasks_amount = 0;
+    hardware_cores_amount = 0;
+    processing_unit_amount = 0;
+    channels_amount = 0;
+    with_cost = 0;
+    totalCost = 0;
+    simulation_time_scale = 0;
 }
     
 
 
 
-void Cost_List::randALL(){
+void TaskSchedulerSimulator::randALL(){
     times = Times(tasks_amount);
     createRandomTasksGraph();
     createRandomProc();
@@ -157,7 +164,7 @@ void Cost_List::randALL(){
     connectRandomCH();
 }
 
-void Cost_List::printALL(std::string filename,bool toScreen) const{
+void TaskSchedulerSimulator::printALL(std::string filename,bool toScreen) const{
     std::ofstream outputFile(filename, std::ofstream::trunc);
     if (outputFile.is_open()) {
         // std::ofstream outputFileMatrix("matrix.dat", std::ofstream::trunc);
@@ -187,7 +194,7 @@ void Cost_List::printALL(std::string filename,bool toScreen) const{
     }
 }
 
-int Cost_List::createRandomProc() {
+int TaskSchedulerSimulator::createRandomProc() {
     Hardwares.clear();
     if(hardware_cores_amount < 1 || processing_unit_amount < 1){
         std::cerr << "Błedna liczba HC lub PU\n";
@@ -203,7 +210,7 @@ int Cost_List::createRandomProc() {
     return 1;
 }
 
-void Cost_List::connectRandomCH(){
+void TaskSchedulerSimulator::connectRandomCH(){
     if(channels_amount < 1){
         std::cerr<< "Zła liczba kanałów";
         return;
@@ -252,7 +259,7 @@ void Cost_List::connectRandomCH(){
     return;
 }
 
-void Cost_List::runTasks() {
+void TaskSchedulerSimulator::runTasks() {
     int TotalCost = 0;
     simulation_time_scale = 1;
     progress.resize(TaskGraph.getVerticesSize(),-2); // -2 - cant be done flag
@@ -263,7 +270,7 @@ void Cost_List::runTasks() {
     int czas = 0;
     std::thread counterThread(Licznik, std::ref(stop), std::ref(czas));
     std::cout << "\nUruchamiam zadania w skali x" << simulation_time_scale << ":\n";
-    for (Instance* i : Instances) threads.push_back(std::thread(&Cost_List::TaskRunner, this, *i));
+    for (Instance* i : Instances) threads.push_back(std::thread(&TaskSchedulerSimulator::TaskRunner, this, *i));
     for (std::thread& thread : threads) thread.join();
     stop = true;
     counterThread.join();
@@ -272,7 +279,7 @@ void Cost_List::runTasks() {
 }
 
 
-void Cost_List::unpredictedHandler(int task_ID){
+void TaskSchedulerSimulator::unpredictedHandler(int task_ID){
     if (allocated_tasks[task_ID] == 1) {
                 return;
     }
@@ -293,10 +300,10 @@ void Cost_List::unpredictedHandler(int task_ID){
     if (bestFoundInst == nullptr){
         Hardware* bestPE = nullptr;
         int maxTime = 0;
-        for (const Hardware& hw : Hardwares) {
+        for (Hardware& hw : Hardwares) {
             if (hw.getType()=="PE" && times.getTime(task_ID, &hw) > maxTime) {
                 maxTime = times.getTime(task_ID, &hw);
-                bestPE = &const_cast<Hardware&>(hw);
+                bestPE = &hw;
             }
         }
         bestFoundInst = new Instance(HWInstancesCount[bestPE->getID()], bestPE);
@@ -310,7 +317,7 @@ void Cost_List::unpredictedHandler(int task_ID){
 
 
 
-int Cost_List::createInstance(int task_ID, const Hardware* h) {
+int TaskSchedulerSimulator::createInstance(int task_ID, const Hardware* h) {
     
     if(allocated_tasks[task_ID]==1){
         return 0;
@@ -330,11 +337,11 @@ int Cost_List::createInstance(int task_ID, const Hardware* h) {
     Instances.push_back(newInst);
     taskInstanceMap[task_ID] = newInst;
     allocated_tasks[task_ID] = 1;
-    //std::cout << "\n\n\ntask instnace map dla " << task_ID << " :: " << taskInstanceMap[task_ID] << "\n\n\n";
+    invalidateStartingTimeCache();
     return 1;
 }
 
-int Cost_List::createInstance(int task_ID) {
+int TaskSchedulerSimulator::createInstance(int task_ID) {
     if (allocated_tasks[task_ID] == 1) {
                 return 0;
     }
@@ -354,10 +361,11 @@ int Cost_List::createInstance(int task_ID) {
     taskInstanceMap[task_ID] = newInst;
     
     allocated_tasks[task_ID] = 1;
+    invalidateStartingTimeCache();
     return 1;
 }
 
-void Cost_List::addTaskToInstance(int task_ID, Instance* inst) {
+void TaskSchedulerSimulator::addTaskToInstance(int task_ID, Instance* inst) {
     if(unpredictedTasks.find(task_ID) != unpredictedTasks.end()){
         unpredictedHandler(task_ID);
         return;
@@ -385,13 +393,12 @@ void Cost_List::addTaskToInstance(int task_ID, Instance* inst) {
 
     taskInstanceMap[task_ID] = inst;
     allocated_tasks[task_ID] = 1;
+    invalidateStartingTimeCache();
     return;
-
-    
 }
 
 
-void Cost_List::removeTaskFromInstance(int task_ID){
+void TaskSchedulerSimulator::removeTaskFromInstance(int task_ID){
     if(unpredictedTasks.find(task_ID) != unpredictedTasks.end()){
         unpredictedHandler(task_ID);
         return;
@@ -402,10 +409,11 @@ void Cost_List::removeTaskFromInstance(int task_ID){
     }
     allocated_tasks[task_ID] = 0;
     taskInstanceMap.erase(task_ID);
+    invalidateStartingTimeCache();
     return;
 }
 
-std::vector<int> Cost_List::findAllToSkipAfterConditional(int taskID) {
+std::vector<int> TaskSchedulerSimulator::findAllToSkipAfterConditional(int taskID) {
     std::unordered_set<int> visited;  // Track visited nodes
     std::unordered_set<int> toSkip;   // Nodes to skip
     std::queue<int> queue;
@@ -442,7 +450,7 @@ std::vector<int> Cost_List::findAllToSkipAfterConditional(int taskID) {
     return std::vector<int>(toSkip.begin(), toSkip.end());
 }
 
-void Cost_List::TaskRunner(Instance inst) {
+void TaskSchedulerSimulator::TaskRunner(Instance inst) {
     int taskCounter = 0;
     const Hardware* running_hw = inst.getHardwarePtr();
     std::set<int> toDo = inst.getTaskSet();
@@ -501,7 +509,7 @@ int extractTaskIdFromDoneCondition(const std::string& variable) {
 }
 
 
-int Cost_List::evaluateCondition(int task_id) {
+int TaskSchedulerSimulator::evaluateCondition(int task_id) {
     std::string variable = conditionTaskMap[task_id].variable;
     std::string op = conditionTaskMap[task_id].op;
     int value_int = conditionTaskMap[task_id].value;
@@ -574,11 +582,9 @@ int Cost_List::evaluateCondition(int task_id) {
     return 0;
 }
 
-void Cost_List::calculateTotalCost() {
+void TaskSchedulerSimulator::calculateTotalCost() {
     totalCost = 0;
     int criticTime = getCriticalTime();
-    int HARD_TIME = 250;
-    int PUNISHMENT = 2;
 
     for (const Instance* instance : Instances) {
         if (!instance || !instance->getHardwarePtr()) continue;
@@ -587,12 +593,12 @@ void Cost_List::calculateTotalCost() {
             totalCost += times.getCost(taskID, instance->getHardwarePtr());
         }
     }
-    if (criticTime > HARD_TIME) {
-        totalCost += (criticTime - HARD_TIME) * PUNISHMENT;
+    if (criticTime > hard_time) {
+        totalCost += (criticTime - hard_time) * penalty_factor;
     }
 }
 
-void Cost_List::exportToJSON(std::ostream& out) const {
+void TaskSchedulerSimulator::exportToJSON(std::ostream& out) const {
     // Count active instances used in schedule
     std::set<std::string> activeInstances;
     for (const auto& p : task_schedule) {
@@ -673,96 +679,11 @@ void Cost_List::exportToJSON(std::ostream& out) const {
     out << "}\n";
 }
 
-void Cost_List::exportToJSONFile(const std::string& filename) const {
+void TaskSchedulerSimulator::exportToJSONFile(const std::string& filename) const {
     std::ofstream outFile(filename);
     if (outFile.is_open()) {
         exportToJSON(outFile);
         outFile.close();
     }
-}
-
-
-
-
-
-//     // std::cout << "Porządek topologiczny: * - stan końcowy, () - czas na najszybszym HW\n";
-//     // for(int i : getLongestPath(0)){
-//     //     std::cout << i <<"(" << times.getTime(i,getLowestTimeHardware(i,0)) <<")";
-//     //     if(TaskGraph.getOutNeighbourIndices(i).size()==0){
-//     //         std::cout <<"*";
-//     //     }
-//     //     std::cout <<"-";
-//     // }
-//     std::cout << "\n";
-//     return;
-// }
-
-
-
-
-
-// std::mutex removeMutex;
 // std::mutex addMutex;
-// std::condition_variable taskCV;
-
-// std::mutex tasksCounterMutex;
-
-// void Cost_List::TaskProgress(int task_id, int time, int hw_id) {
-
-//     this->progress[task_id] = 1;
-
-//     for (int i = 0; i < time; ++i) {
-//         progress[task_id] = ((i + 1) * 100) / time;
-//         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-//     }
-
-//     addMutex.lock();
-//     for(int i : TaskGraph.getOutNeighbourIndices(task_id)){
-//         if(!progress[i]>0){
-//             tasksToAdd.push_back(i);
-//         }
-//     }
-//     addMutex.unlock();
-
-//     removeMutex.lock();
-//     tasksToRemove.push_back(task_id);
-//     removeMutex.unlock();
-
-
-//     HWinUse[hw_id] = 0;
-// }
-
-
-
-// void Cost_List::ReadProgress() {
-//     while(true){
-//         for(int i : progress){
-//         std::cout << "Task" << i << " ON " << progress[i] << "%\n";
-//         }
-//         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-//     }
-
-// }
-
-
-    // int startingTimeNewTask = getStartingTime(task_ID);
-
-    // // Temporary set to store tasks in sorted order
-    // std::set<int> sortedTaskSet;
-
-    // // Flag to check if the new task has been inserted
-    // bool taskInserted = false;
-    // for (int taskId : inst->getTaskSet()) {
-    //     int startingTimeCurrTask = getStartingTime(taskId);
-    //     if (startingTimeNewTask < startingTimeCurrTask && !taskInserted) {
-    //         sortedTaskSet.insert(task_ID);
-    //         taskInserted = true;
-    //     }
-    //     sortedTaskSet.insert(taskId);
-    // }
-    // if (!taskInserted) {
-    //     sortedTaskSet.insert(task_ID);
-    // }
-    // inst->setTasksSet(sortedTaskSet);
-    // taskInstanceMap[task_ID] = inst;
-
+}

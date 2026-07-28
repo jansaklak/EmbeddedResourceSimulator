@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <random>
+#include <limits>
 
 #include "../models/HardwareInstance.h"
 #include "../models/CommunicationBus.h"
@@ -28,7 +29,7 @@
 #include "../models/SubTaskManager.h"
 #include "../models/ConfigParser.h"
 
-#define INF 2147483647
+constexpr int INF = std::numeric_limits<int>::max();
 
 /**
  * @brief Represents conditional task evaluation parameters.
@@ -99,8 +100,9 @@ private:
     int hardware_cores_amount;
     int processing_unit_amount;
     int channels_amount;
-    int TotalCost;
     int simulation_time_scale;
+    int hard_time = 250;
+    int penalty_factor = 2;
 
     // Collections & Storage
     std::vector<HardwareProcessor> Hardwares;
@@ -115,6 +117,7 @@ private:
     std::map<int, int> HWInstancesCount;
     std::map<int, HardwareInstance*> taskInstanceMap;
     std::map<int, std::pair<int, int>> task_schedule;
+    std::unordered_map<int, int> startingTimeCache;
     std::map<int, std::string> conditions;
     std::map<int, TaskData> conditionTaskMap;
     std::map<int, std::vector<HardwareProcessor>> subTaskHW;
@@ -169,7 +172,12 @@ public:
     void createRandomConditionalTasksGraph();
     void clear();
     void clearNUM();
+    void invalidateStartingTimeCache() { startingTimeCache.clear(); }
     void makeConditional(int Task_ID);
+    void setHardTime(int ht) { hard_time = ht; }
+    int getHardTime() const { return hard_time; }
+    void setPenaltyFactor(int pf) { penalty_factor = pf; }
+    int getPenaltyFactor() const { return penalty_factor; }
 
     // Queries & Metrics
     ExecutionMatrix getTimes() const;
@@ -182,12 +190,12 @@ public:
     int getCriticalTime() const;
     int getTimeRunning(const HardwareInstance* inst);
     int getIdleTime(const HardwareInstance* inst, int timeStop);
-    std::vector<int> getLongestPath(int start) const;
+    std::vector<int> getLongestPath(int start);
     std::vector<HardwareProcessor> getHardwares() const;
     std::vector<CommunicationBus> getCOMS() const;
     std::deque<int> getMaxPath(std::vector<int> toSkip) const;
-    HardwareProcessor* getLowestTimeHardware(int task_id, int time_cost_normalized) const;
-    HardwareProcessor* getSlowestHardware(int) const;
+    HardwareProcessor* getLowestTimeHardware(int task_id, int time_cost_normalized);
+    HardwareProcessor* getSlowestHardware(int);
     const HardwareInstance* getShortestRunningInstance();
     const HardwareInstance* getLongestRunningInstance();
 

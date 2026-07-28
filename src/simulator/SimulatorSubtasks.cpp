@@ -7,7 +7,7 @@
 #include <mutex>
 #include <map>
 
-void Cost_List::subTaskHandler(int taskID){
+void TaskSchedulerSimulator::subTaskHandler(int taskID){
     int currHW;
     int totalCost = 0;
     int totalTime = 0;

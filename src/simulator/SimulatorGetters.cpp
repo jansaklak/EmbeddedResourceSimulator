@@ -7,7 +7,7 @@
 #include <mutex>
 #include <map>
 
-Instance* Cost_List::getInstance(int task_id) const{
+Instance* TaskSchedulerSimulator::getInstance(int task_id) const{
     auto it = taskInstanceMap.find(task_id);
     if (it != taskInstanceMap.end()) {
         return it->second;
@@ -18,6 +18,10 @@ Instance* Cost_List::getInstance(int task_id) const{
 
 int TaskSchedulerSimulator::getStartingTime(int task_id) {
     if(task_id == 0) return 0;
+    auto cacheIt = startingTimeCache.find(task_id);
+    if (cacheIt != startingTimeCache.end()) {
+        return cacheIt->second;
+    }
     int maxTime = 0;
     for (std::vector<int> path : TaskGraph.DFS(0, task_id)) {
         int pathTime = 0;
@@ -44,6 +48,7 @@ int TaskSchedulerSimulator::getStartingTime(int task_id) {
             maxTime = pathTime;
         }
     }
+    startingTimeCache[task_id] = maxTime;
     return maxTime;
 }
 
@@ -81,14 +86,14 @@ int TaskSchedulerSimulator::getStartingTimeScheduled(int task_id) {
     return maxTime;
 }
 
-int Cost_List::getEndingTime(int task_id) {
+int TaskSchedulerSimulator::getEndingTime(int task_id) {
     const Instance* inst = getInstance(task_id);
     if (!inst || !inst->getHardwarePtr()) return getStartingTime(task_id);
     int runningTime = times.getTime(task_id, inst->getHardwarePtr());
     return getStartingTime(task_id) + runningTime;
 }
 
-std::vector<int> Cost_List::getLongestPath(int start) const {
+std::vector<int> TaskSchedulerSimulator::getLongestPath(int start) {
         std::vector<std::vector<Edge>> adjList = TaskGraph.getAdjList();
         std::vector<int> dist(TaskGraph.getVerticesSize(), std::numeric_limits<int>::min());
         std::vector<int> inDegree(TaskGraph.getVerticesSize(), 0);
@@ -124,7 +129,7 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
         return longestPath;
     }
 
-    void Cost_List::createPaths(std::vector<std::vector<Edge>> adjList) {
+    void TaskSchedulerSimulator::createPaths(std::vector<std::vector<Edge>> adjList) {
         std::vector<bool> visited(TaskGraph.getVerticesSize(), false);
         bool allVisited = false;
         std::deque<std::deque<int>> queue;
@@ -156,7 +161,7 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
         }
     }
 
-    void Cost_List::printPaths() {
+    void TaskSchedulerSimulator::printPaths() {
         for (auto const& path : paths) {
             for (auto const& n : path) {
                 std::cout << n << " ";
@@ -165,7 +170,7 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
         }
     }
 
-    std::deque<int> Cost_List::getMaxPath(std::vector<int> toSkip) const {
+    std::deque<int> TaskSchedulerSimulator::getMaxPath(std::vector<int> toSkip) const {
         std::deque<int> maxPath;
         int maxWeight = 0;
 
@@ -192,11 +197,11 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
     }
 
 
-    Hardware* Cost_List::getLowestTimeHardware(int task_id, int time_cost_normalized) const{
+    Hardware* TaskSchedulerSimulator::getLowestTimeHardware(int task_id, int time_cost_normalized){
         Hardware* outHW = nullptr;
         int min_time = INF;
-        for (const Hardware& hw : Hardwares) {
-            int time;
+        for (Hardware& hw : Hardwares) {
+            int time = INF;
             if(time_cost_normalized == 0){
                 time = times.getTime(task_id, &hw);
             }
@@ -208,7 +213,7 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
             }
             if (time < min_time) {
                 min_time = time;
-                outHW = &const_cast<Hardware&>(hw);
+                outHW = &hw;
             }
         }
         return outHW;
@@ -216,19 +221,19 @@ std::vector<int> Cost_List::getLongestPath(int start) const {
 
 
 
-    Hardware* Cost_List::getSlowestHardware(int task_id) const {
+    Hardware* TaskSchedulerSimulator::getSlowestHardware(int task_id) {
         Hardware*outHW = nullptr;
         int maxTime = 0;
-        for (const Hardware& hw : Hardwares) {
+        for (Hardware& hw : Hardwares) {
             if (times.getTime(task_id, &hw) > maxTime) {
                 maxTime = times.getTime(task_id, &hw);
-                outHW = &const_cast<Hardware&>(hw);
+                outHW = &hw;
             }
         }
         return outHW;
     }
 
-int Cost_List::getCriticalTime() const{
+int TaskSchedulerSimulator::getCriticalTime() const{
     int maxTime = 0;
     // for(Instance* i : Instances){
     //     if(getInstanceEndingTime(i)>maxTime) maxTime = getInstanceEndingTime(i);
@@ -242,7 +247,7 @@ int Cost_List::getCriticalTime() const{
     return maxTime;
 }
 
-int Cost_List::getInstanceStartingTime(const Instance* inst){
+int TaskSchedulerSimulator::getInstanceStartingTime(const Instance* inst){
     int startingTime= 0;
     for(int i : inst->getTaskSet()){
         if(getStartingTime(i)>startingTime) startingTime = getStartingTime(i);
@@ -250,7 +255,7 @@ int Cost_List::getInstanceStartingTime(const Instance* inst){
     return startingTime;
 }
 
-int Cost_List::getInstanceEndingTime(const Instance* inst){
+int TaskSchedulerSimulator::getInstanceEndingTime(const Instance* inst){
     int endingTime= 0;
     for(int i : inst->getTaskSet()){
         if(getEndingTime(i)>endingTime) endingTime = getEndingTime(i);
@@ -258,7 +263,7 @@ int Cost_List::getInstanceEndingTime(const Instance* inst){
     return endingTime;
 }
 
-int Cost_List::getTimeRunning(const Instance* inst){
+int TaskSchedulerSimulator::getTimeRunning(const Instance* inst){
     int total_time =0;
     for(int i : inst->getTaskSet()){
         total_time += getEndingTime(i) - getStartingTime(i);
@@ -266,7 +271,7 @@ int Cost_List::getTimeRunning(const Instance* inst){
     return total_time;
 }
 
-int Cost_List::getIdleTime(const Instance* inst,int timeStop){
+int TaskSchedulerSimulator::getIdleTime(const Instance* inst,int timeStop){
         int total_time =0;
         for(int i : inst->getTaskSet()){
             if(getStartingTime(i) + (getEndingTime(i) - getStartingTime(i)) >=timeStop){
@@ -278,7 +283,7 @@ int Cost_List::getIdleTime(const Instance* inst,int timeStop){
         return timeStop - total_time;
 }
 
-const Instance* Cost_List::getLongestRunningInstance(){
+const Instance* TaskSchedulerSimulator::getLongestRunningInstance(){
     int longest_running = std::numeric_limits<int>::min();
     const Instance* longest = nullptr;
     for (const Instance* inst : Instances) {
@@ -291,7 +296,7 @@ const Instance* Cost_List::getLongestRunningInstance(){
     return longest;
 }
 
-const Instance* Cost_List::getShortestRunningInstance() {
+const Instance* TaskSchedulerSimulator::getShortestRunningInstance() {
         int shortest_running = std::numeric_limits<int>::max();
         const Instance* shortest = nullptr;
         for (const Instance* inst : Instances) {

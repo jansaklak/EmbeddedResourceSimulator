@@ -6,18 +6,18 @@
 #include <cmath>
 #include <filesystem>
 
-#include "COM.h"
-#include "Graf.h"
-#include "Hardware.h"
-#include "Times.h"
-#include "Cost_List.h"
-#include "SubTasks.h"
+#include "src/simulator/TaskSchedulerSimulator.h"
+#include "src/models/CommunicationBus.h"
+#include "src/models/TaskGraph.h"
+#include "src/models/HardwareProcessor.h"
+#include "src/models/ExecutionMatrix.h"
+#include "src/models/SubTaskManager.h"
 
-extern const int SCALE = 100;
+const int SCALE = 100;
 
 namespace fs = std::filesystem;
 
-void simulationAndGantt(Cost_List& lista){
+void simulationAndGantt(TaskSchedulerSimulator& lista){
     bool sim;
     bool gantt;
     std::cout << "Czy wyświetlić wykres Gantta? 0/1\n\t->";
@@ -34,7 +34,7 @@ void simulationAndGantt(Cost_List& lista){
 }
 
 
-Cost_List generateRandomCostList(){
+TaskSchedulerSimulator generateRandomCostList(){
     int tasks_amount, hardware_cores_amount, processing_units_amount, channels_amount;
     int to_screen, with_cost,conditional;
 
@@ -51,7 +51,7 @@ Cost_List generateRandomCostList(){
     if(with_cost != 0){
         with_cost = 1;
     }
-    Cost_List lista_kosztow = Cost_List(tasks_amount, hardware_cores_amount, processing_units_amount, channels_amount, with_cost);
+    TaskSchedulerSimulator lista_kosztow = TaskSchedulerSimulator(tasks_amount, hardware_cores_amount, processing_units_amount, channels_amount, with_cost);
     lista_kosztow.randALL();
     std::cout << "Czy Warunkowy? 0/1: ";
     std::cin >> conditional;
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]){
             int strategy = std::stoi(argv[3]);
             std::string out_path = (argc >= 5) ? argv[4] : "";
             
-            Cost_List lista;
+            TaskSchedulerSimulator lista;
             if (lista.Load_From_File(file_path) != 1) {
                 std::cerr << "{\"error\": \"Could not load file " << file_path << "\"}\n";
                 return 1;
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]){
             int strategy = (argc >= 9) ? std::stoi(argv[8]) : 1;
             std::string out_path = (argc >= 10) ? argv[9] : "";
 
-            Cost_List lista(tasks, hc, pe, ch, with_cost);
+            TaskSchedulerSimulator lista(tasks, hc, pe, ch, with_cost);
             lista.randALL();
             if (conditional) {
                 lista.createRandomConditionalTasksGraph();
@@ -129,7 +129,7 @@ int main(int argc, char* argv[]){
     
     to_screen = 0;
     std::string file_name;
-    Cost_List lista = Cost_List();
+    TaskSchedulerSimulator lista = TaskSchedulerSimulator();
     while(running){
         if(file_loaded){
             std::cout << "\tWczytano plik: " << file_name << "\n0 - Reset\n1 - Uruchom Zadania\n9 - Zakoncz program\n\t->";
@@ -143,7 +143,7 @@ int main(int argc, char* argv[]){
                 switch(menu){
                     case 0:
                         file_loaded = 0;
-                        lista = Cost_List();
+                        lista = TaskSchedulerSimulator();
                         break;
                     case 1:
                         int strategy;

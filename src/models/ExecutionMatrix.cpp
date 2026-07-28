@@ -60,8 +60,8 @@ void ExecutionMatrix::setSubTaskTotalTime(int TaskID, int subTotalTime, int subT
 void ExecutionMatrix::normalize(double task_ratio,double cost_ratio,double time_ratio) {
     normalized_matrix.resize(times_matrix.size());
     for(size_t i = 0; i < times_matrix.size(); i++) {
-        normalized_matrix[i].resize(times_matrix.size());
-        for(size_t j = 0; j < times_matrix.size(); j++) {
+        normalized_matrix[i].resize(times_matrix[i].size());
+        for(size_t j = 0; j < times_matrix[i].size(); j++) {
             normalized_matrix[i][j] = times_matrix[i][j] * cost_matrix[i][j];
         }
     }
@@ -122,18 +122,22 @@ void ExecutionMatrix::printCosts(std::ostream& out) const{
 
 
 int ExecutionMatrix::getTime(int TaskID, const HardwareProcessor* h) const {
-    if (h == nullptr) return -1;
-    std::vector<int> row = times_matrix[TaskID];
-    return row[h->getID()];
+    if (h == nullptr || TaskID < 0 || TaskID >= static_cast<int>(times_matrix.size())) return 0;
+    int hid = h->getID();
+    if (hid < 0 || hid >= static_cast<int>(times_matrix[TaskID].size())) return 0;
+    return times_matrix[TaskID][hid];
 }
+
 int ExecutionMatrix::getCost(int TaskID, const HardwareProcessor* h) const {
-    if (h == nullptr) return -1;
-    std::vector<int> row = cost_matrix[TaskID];
-    return row[h->getID()];
+    if (h == nullptr || TaskID < 0 || TaskID >= static_cast<int>(cost_matrix.size())) return 0;
+    int hid = h->getID();
+    if (hid < 0 || hid >= static_cast<int>(cost_matrix[TaskID].size())) return 0;
+    return cost_matrix[TaskID][hid];
 }
 
 int ExecutionMatrix::getNormalized(int TaskID, const HardwareProcessor* h) const {
-    if (h == nullptr) return -1;
-    std::vector<int> row = cost_matrix[TaskID];
-    return row[h->getID()];
+    if (h == nullptr || TaskID < 0 || TaskID >= static_cast<int>(normalized_matrix.size())) return 0;
+    int hid = h->getID();
+    if (hid < 0 || hid >= static_cast<int>(normalized_matrix[TaskID].size())) return 0;
+    return static_cast<int>(normalized_matrix[TaskID][hid]);
 }

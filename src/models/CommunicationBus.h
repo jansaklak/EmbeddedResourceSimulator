@@ -4,7 +4,7 @@
 
 #include <iostream>
 #include <vector>
-#include "Hardware.h"
+#include "HardwareProcessor.h"
 
 /**
  * @brief Represents a communication bus / channel interconnecting hardware processing units.
