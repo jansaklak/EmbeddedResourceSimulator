@@ -593,9 +593,23 @@ void Cost_List::calculateTotalCost() {
 }
 
 void Cost_List::exportToJSON(std::ostream& out) const {
+    // Count active instances used in schedule
+    std::set<std::string> activeInstances;
+    for (const auto& p : task_schedule) {
+        int tid = p.first;
+        auto instIt = taskInstanceMap.find(tid);
+        if (instIt != taskInstanceMap.end() && instIt->second && instIt->second->getHardwarePtr()) {
+            std::string instStr = instIt->second->getHardwarePtr()->getType() + 
+                                  std::to_string(instIt->second->getHardwarePtr()->getID()) + "_" + 
+                                  std::to_string(instIt->second->getID());
+            activeInstances.insert(instStr);
+        }
+    }
+
     out << "{\n";
     out << "  \"tasksCount\": " << tasks_amount << ",\n";
     out << "  \"hardwareCount\": " << Hardwares.size() << ",\n";
+    out << "  \"activeInstancesCount\": " << activeInstances.size() << ",\n";
     out << "  \"channelsCount\": " << Channels.size() << ",\n";
     out << "  \"criticalTime\": " << getCriticalTime() << ",\n";
     out << "  \"totalCost\": " << totalCost << ",\n";

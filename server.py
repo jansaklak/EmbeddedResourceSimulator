@@ -157,11 +157,13 @@ class EmbeddedSimulatorHandler(http.server.SimpleHTTPRequestHandler):
                     json_end = stdout.rfind('}')
                     if json_start != -1 and json_end != -1:
                         data = json.loads(stdout[json_start:json_end+1])
+                        schedule = data.get('schedule', [])
+                        active_instances = data.get('activeInstancesCount', len(set(s.get('unit') for s in schedule if s.get('unit'))))
                         return {
                             'strategy': strat,
                             'criticalTime': data.get('criticalTime', 0),
                             'totalCost': data.get('totalCost', 0),
-                            'hardwareCount': data.get('hardwareCount', 0)
+                            'hardwareCount': active_instances
                         }
                 except Exception as e:
                     return {'strategy': strat, 'error': str(e)}

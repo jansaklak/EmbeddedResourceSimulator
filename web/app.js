@@ -124,10 +124,10 @@ async function runSimulation() {
     currentSimData = data;
     logConsole(data.log || "Symulacja zakończona pomyślnie!");
 
-    // Update Quick Stats
-    document.getElementById('quickCritTime').textContent = `${data.criticalTime} j.c.`;
-    document.getElementById('quickTotalCost').textContent = `${data.totalCost} PLN`;
-    document.getElementById('quickInstances').textContent = `${data.hardware ? data.hardware.length : 0} jednostek`;
+    const activeInstancesCount = data.activeInstancesCount !== undefined 
+      ? data.activeInstancesCount 
+      : (new Set((data.schedule || []).map(s => s.unit).filter(Boolean)).size);
+    document.getElementById('quickInstances').textContent = `${activeInstancesCount} instancji`;
 
     // Keep live strategy selector in sync
     const liveSelect = document.getElementById('liveStrategySelect');
@@ -677,13 +677,15 @@ async function runBenchmark() {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (!data.error) {
+        const activeCount = data.activeInstancesCount !== undefined 
+          ? data.activeInstancesCount 
+          : (new Set((data.schedule || []).map(x => x.unit).filter(Boolean)).size);
         const resObj = {
           strategy: s.id,
           name: s.name,
           criticalTime: data.criticalTime,
           totalCost: data.totalCost,
-          hardwareCount: data.hardware ? data.hardware.length : 0
+          hardwareCount: activeCount
         };
         results.push(resObj);
         logConsole(`  ✅ ${s.name} -> Czas Krytyczny: ${data.criticalTime} ms | Koszt Total: ${data.totalCost} PLN | Instancji HW: ${resObj.hardwareCount}`);
