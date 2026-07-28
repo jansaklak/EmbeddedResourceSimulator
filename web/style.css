@@ -465,12 +465,62 @@ body {
   border-radius: 8px;
   background: #090d16;
   position: relative;
+  padding: 1rem;
 }
 
 .dag-svg {
   width: 100%;
   height: 100%;
-  min-height: 450px;
+  min-height: 480px;
+}
+
+.dag-edge {
+  stroke: rgba(148, 163, 184, 0.5);
+  stroke-width: 2px;
+  stroke-dasharray: 4 2;
+  transition: all 0.2s;
+  marker-end: url(#arrow);
+}
+
+.dag-edge:hover {
+  stroke: var(--primary);
+  stroke-width: 3px;
+  marker-end: url(#arrow-active);
+}
+
+.dag-node {
+  fill: #1e293b;
+  stroke: var(--primary);
+  stroke-width: 2.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  filter: drop-shadow(0 2px 8px rgba(6, 182, 212, 0.3));
+}
+
+.dag-node:hover {
+  fill: rgba(6, 182, 212, 0.25);
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.7));
+}
+
+.dag-node.conditional {
+  stroke: #ec4899;
+  filter: drop-shadow(0 2px 8px rgba(236, 72, 153, 0.4));
+}
+
+.dag-node.unpredicted {
+  stroke: #f59e0b;
+  filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.4));
+}
+
+.dag-node-text {
+  fill: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  pointer-events: none;
+  text-anchor: middle;
+  dominant-baseline: central;
 }
 
 /* Benchmark Panel */

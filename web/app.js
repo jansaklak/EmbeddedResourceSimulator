@@ -463,11 +463,22 @@ function renderDag() {
   const numTasks = tasks.length;
   if (numTasks === 0) return;
 
-  // Simple layered layout algorithm
+  // Add marker defs for arrowheads
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  defs.innerHTML = `
+    <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(148, 163, 184, 0.6)" />
+    </marker>
+    <marker id="arrow-active" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+    </marker>
+  `;
+  svg.appendChild(defs);
+
+  // Layered topological layout algorithm
   const layers = [];
   const visited = new Set();
   
-  // Find roots (nodes with in-degree 0)
   const inDegree = new Array(numTasks).fill(0);
   tasks.forEach(t => {
     (t.outEdges || []).forEach(e => {
@@ -498,7 +509,6 @@ function renderDag() {
     });
 
     if (nextLayer.length === 0) {
-      // Add unvisited nodes to prevent infinite loop
       for (let i = 0; i < numTasks; i++) {
         if (!visited.has(i)) {
           nextLayer.push(i);
@@ -509,17 +519,31 @@ function renderDag() {
 
     layers.push(nextLayer);
     nextLayer.forEach(id => visited.add(id));
+    currentLayer = nextLayer;
   }
 
-  // Calculate coordinates
+  // Calculate coordinates & dimensions
   const nodeCoords = {};
-  const layerWidth = 140;
-  const nodeHeight = 50;
+  const layerWidth = 150;
+  const nodeHeight = 65;
+
+  let maxLayerSize = 0;
+  layers.forEach(l => { if (l.length > maxLayerSize) maxLayerSize = l.length; });
+
+  const totalWidth = Math.max(800, layers.length * layerWidth + 160);
+  const totalHeight = Math.max(480, maxLayerSize * nodeHeight + 120);
+
+  svg.setAttribute('width', totalWidth);
+  svg.setAttribute('height', totalHeight);
+  svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
 
   layers.forEach((layer, layerIdx) => {
     const x = 80 + layerIdx * layerWidth;
+    const layerH = layer.length * nodeHeight;
+    const startY = (totalHeight - layerH) / 2 + 30;
+
     layer.forEach((nodeId, idx) => {
-      const y = 60 + idx * nodeHeight;
+      const y = startY + idx * nodeHeight;
       nodeCoords[nodeId] = { x, y };
     });
   });
@@ -538,6 +562,11 @@ function renderDag() {
         line.setAttribute('x2', target.x);
         line.setAttribute('y2', target.y);
         line.setAttribute('class', 'dag-edge');
+
+        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        title.textContent = `T${t.id} → T${e.target} (Koszt comm: ${e.weight})`;
+        line.appendChild(title);
+
         svg.appendChild(line);
       }
     });
@@ -552,16 +581,23 @@ function renderDag() {
     g.setAttribute('transform', `translate(${coord.x}, ${coord.y})`);
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('r', '18');
+    circle.setAttribute('r', '20');
     
     let cls = 'dag-node';
     if (t.isConditional) cls += ' conditional';
     if (t.isUnpredicted) cls += ' unpredicted';
     circle.setAttribute('class', cls);
 
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    let nodeInfo = `Zadanie T${t.id}`;
+    if (t.isConditional) nodeInfo += `\nWarunek: ${t.condition || 'TAK'}`;
+    if (t.isUnpredicted) nodeInfo += `\nZadanie Nieprzewidziane`;
+    title.textContent = nodeInfo;
+    g.appendChild(title);
+
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('class', 'dag-node-text');
-    text.setAttribute('dy', '4');
+    text.setAttribute('dy', '1');
     text.setAttribute('text-anchor', 'middle');
     text.textContent = `T${t.id}`;
 
