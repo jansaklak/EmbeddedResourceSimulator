@@ -273,7 +273,19 @@
         <!-- View 3: Benchmark Analytics -->
         <section id="viewBenchmark" class="view-panel">
           <div class="panel-header">
-            <h3>Porównanie Wyników Strategii Szeregowania</h3>
+            <h3>🏆 Porównanie Wyników Strategii Szeregowania</h3>
+            <button class="btn btn-primary btn-sm" onclick="runBenchmark()">
+              <span class="btn-icon">⚡</span> Ponowny Benchmark
+            </button>
+          </div>
+          <div id="benchmarkStatusBox" class="benchmark-status-box hidden">
+            <div class="status-message">
+              <span id="benchmarkStatusSpinner" class="spinner">⏳</span>
+              <span id="benchmarkStatusText">Rozpoczynanie analizy strategii...</span>
+            </div>
+            <div class="benchmark-progress-bar-container">
+              <div id="benchmarkProgressBar" class="benchmark-progress-bar" style="width: 0%;"></div>
+            </div>
           </div>
           <div class="benchmark-container">
             <div id="benchmarkCards" class="benchmark-cards"></div>

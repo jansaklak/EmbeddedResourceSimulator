@@ -457,6 +457,7 @@ function renderDag() {
   if (!currentSimData || !currentSimData.tasks) return;
 
   const svg = document.getElementById('dagSvg');
+  if (!svg) return;
   svg.innerHTML = '';
 
   const tasks = currentSimData.tasks;
@@ -467,7 +468,7 @@ function renderDag() {
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = `
     <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(148, 163, 184, 0.6)" />
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
     </marker>
     <marker id="arrow-active" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
@@ -561,6 +562,10 @@ function renderDag() {
         line.setAttribute('y1', source.y);
         line.setAttribute('x2', target.x);
         line.setAttribute('y2', target.y);
+        line.setAttribute('stroke', '#38bdf8');
+        line.setAttribute('stroke-width', '2.5');
+        line.setAttribute('stroke-dasharray', '4 2');
+        line.setAttribute('marker-end', 'url(#arrow)');
         line.setAttribute('class', 'dag-edge');
 
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -581,24 +586,38 @@ function renderDag() {
     g.setAttribute('transform', `translate(${coord.x}, ${coord.y})`);
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('r', '20');
+    circle.setAttribute('r', '22');
     
-    let cls = 'dag-node';
-    if (t.isConditional) cls += ' conditional';
-    if (t.isUnpredicted) cls += ' unpredicted';
-    circle.setAttribute('class', cls);
+    let fillColor = '#0f172a';
+    let strokeColor = '#06b6d4';
+    if (t.isConditional) {
+      fillColor = '#831843';
+      strokeColor = '#ec4899';
+    } else if (t.isUnpredicted) {
+      fillColor = '#78350f';
+      strokeColor = '#f59e0b';
+    }
+
+    circle.setAttribute('fill', fillColor);
+    circle.setAttribute('stroke', strokeColor);
+    circle.setAttribute('stroke-width', '3');
+    circle.setAttribute('class', 'dag-node');
 
     const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
     let nodeInfo = `Zadanie T${t.id}`;
     if (t.isConditional) nodeInfo += `\nWarunek: ${t.condition || 'TAK'}`;
-    if (t.isUnpredicted) nodeInfo += `\nZadanie Nieprzewidziane`;
+    if (t.isUnpredicted) nodeInfo += `\nNieprzewidziane`;
     title.textContent = nodeInfo;
     g.appendChild(title);
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('class', 'dag-node-text');
-    text.setAttribute('dy', '1');
+    text.setAttribute('fill', '#ffffff');
+    text.setAttribute('font-size', '13px');
+    text.setAttribute('font-weight', 'bold');
+    text.setAttribute('font-family', 'var(--font-mono), monospace, sans-serif');
     text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('dy', '1');
     text.textContent = `T${t.id}`;
 
     g.appendChild(circle);
@@ -609,29 +628,85 @@ function renderDag() {
 
 async function runBenchmark() {
   const filename = document.getElementById('fileSelect').value || 'graph20.dat';
-  logConsole(`Uruchamianie benchmarku wszystkich strategii dla ${filename}...`);
+  switchView('benchmark');
 
-  try {
-    const res = await fetch('/api/benchmark', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename })
-    });
-    const data = await res.json();
-    if (data.results) {
-      renderBenchmarkResults(data.results);
-      switchView('benchmark');
-      logConsole("Benchmark wykonany pomyślnie na wszystkich rdzeniach!");
+  const statusBox = document.getElementById('benchmarkStatusBox');
+  const statusText = document.getElementById('benchmarkStatusText');
+  const progressBar = document.getElementById('benchmarkProgressBar');
+  const cardsContainer = document.getElementById('benchmarkCards');
+  const barChartContainer = document.getElementById('benchmarkBarChart');
+
+  if (statusBox) statusBox.classList.remove('hidden');
+  cardsContainer.innerHTML = '';
+  barChartContainer.innerHTML = '';
+
+  const stratList = [
+    { id: 1, name: 'S1: Najszybsza Dedykowana' },
+    { id: 2, name: 'S2: Najtańsza Dedykowana' },
+    { id: 3, name: 'S3: Najszybsza z Upakowywaniem' },
+    { id: 5, name: 'S5: Poziomowa BFS' },
+    { id: 6, name: 'S6: Zachłanna Ścieżki Krytycznej' },
+    { id: 7, name: 'S7: Hybrydowa z Rafinacją' },
+    { id: 8, name: 'S8: Optymalizacja z Funkcją Kary' },
+    { id: 9, name: 'S9: Monolityczna Baseline' }
+  ];
+
+  logConsole(`=======================================================`);
+  logConsole(`📊 ROZPOCZYNANIE BENCHMARKU STRATEGII DLA PLIKU: ${filename}`);
+  logConsole(`=======================================================`);
+
+  const results = [];
+  const totalStrats = stratList.length;
+
+  for (let i = 0; i < totalStrats; i++) {
+    const s = stratList[i];
+    const pct = Math.round(((i + 1) / totalStrats) * 100);
+    if (progressBar) progressBar.style.width = `${pct}%`;
+    if (statusText) statusText.textContent = `⏳ [${i + 1}/${totalStrats}] Testowanie: ${s.name}...`;
+    logConsole(`⏳ [${i + 1}/${totalStrats}] Wykonywanie symulacji dla ${s.name} (ID: ${s.id})...`);
+
+    try {
+      const payload = { strategy: s.id, random: false, filename };
+      const res = await fetch('/api/run-simulation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.error) {
+        const resObj = {
+          strategy: s.id,
+          name: s.name,
+          criticalTime: data.criticalTime,
+          totalCost: data.totalCost,
+          hardwareCount: data.hardware ? data.hardware.length : 0
+        };
+        results.push(resObj);
+        logConsole(`  ✅ ${s.name} -> Czas Krytyczny: ${data.criticalTime} ms | Koszt Total: ${data.totalCost} PLN | Instancji HW: ${resObj.hardwareCount}`);
+        renderBenchmarkResults(results);
+      } else {
+        logConsole(`  ❌ Błąd dla ${s.name}: ${data.error}`);
+      }
+    } catch (err) {
+      logConsole(`  ❌ Błąd komunikacji dla ${s.name}: ${err.message}`);
     }
-  } catch (err) {
-    logConsole("Błąd wykonywania benchmarku: " + err.message);
   }
+
+  if (statusText) statusText.textContent = `✅ Benchmark ukończony! Przeanalizowano wszystkie ${results.length} strategii.`;
+  logConsole(`=======================================================`);
+  logConsole(`🏆 BENCHMARK ZAKOŃCZONY SUKCESEM dla ${results.length} strategii.`);
+  logConsole(`=======================================================`);
+
+  setTimeout(() => {
+    if (statusBox) statusBox.classList.add('hidden');
+  }, 4000);
 }
 
 function renderBenchmarkResults(results) {
   const cardsContainer = document.getElementById('benchmarkCards');
   const barChartContainer = document.getElementById('benchmarkBarChart');
 
+  if (!cardsContainer || !barChartContainer) return;
   cardsContainer.innerHTML = '';
   barChartContainer.innerHTML = '';
 
@@ -661,9 +736,9 @@ function renderBenchmarkResults(results) {
     const card = document.createElement('div');
     card.className = `b-card ${r.strategy === winnerStrat ? 'winner' : ''}`;
     card.innerHTML = `
-      <div class="b-card-title">${stratNames[r.strategy] || 'Strategia ' + r.strategy} ${r.strategy === winnerStrat ? '🏆' : ''}</div>
-      <div class="b-card-metric"><span>Czas Krytyczny:</span> <strong>${r.criticalTime || '-'}</strong></div>
-      <div class="b-card-metric"><span>Koszt Total:</span> <strong>${r.totalCost || '-'}</strong></div>
+      <div class="b-card-title">${stratNames[r.strategy] || 'Strategia ' + r.strategy} ${r.strategy === winnerStrat ? '🏆 WINNER' : ''}</div>
+      <div class="b-card-metric"><span>Czas Krytyczny:</span> <strong>${r.criticalTime || '-'} ms</strong></div>
+      <div class="b-card-metric"><span>Koszt Total:</span> <strong>${r.totalCost || '-'} PLN</strong></div>
       <div class="b-card-metric"><span>Instancje HW:</span> <strong>${r.hardwareCount || '-'}</strong></div>
     `;
     cardsContainer.appendChild(card);
@@ -674,7 +749,7 @@ function renderBenchmarkResults(results) {
 
     const heightPct = Math.round((r.criticalTime / maxTime) * 100);
     barGroup.innerHTML = `
-      <div class="chart-bar" style="height: ${heightPct}%;" title="Czas: ${r.criticalTime}, Koszt: ${r.totalCost}"></div>
+      <div class="chart-bar" style="height: ${heightPct}%;" title="${stratNames[r.strategy]}: Czas=${r.criticalTime}ms, Koszt=${r.totalCost} PLN"></div>
       <span class="chart-bar-label">S${r.strategy}</span>
     `;
     barChartContainer.appendChild(barGroup);
