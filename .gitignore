@@ -1,0 +1,16 @@
+# Binaries and compiled object files
+main
+*.o
+*.a
+*.so
+*.dylib
+*.Identifier
+data/*.temp
+
+# Temporary files & cache
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated output files
+gantt_data.dat

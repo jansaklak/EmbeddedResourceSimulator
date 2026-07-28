@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Symulator Zasobów Wbudowanych — Embedded Resource Simulator</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div class="brand-text">
+          <h1>Embedded Resource Simulator</h1>
+          <span class="subtitle">System Szeregowania i Symulacji Zadań w Środowiskach Wbudowanych</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-pill active" id="statusPill">
+          <span class="dot"></span> Silnik C++ Gotowy
+        </div>
+        <div class="file-badge" id="currentFileBadge">Plik: graph20.dat</div>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <!-- Sidebar Control Panel -->
+      <aside class="sidebar">
+        <div class="card">
+          <h2 class="card-title">⚙️ Konfiguracja Problemu</h2>
+          
+          <!-- Mode Switcher -->
+          <div class="tab-switch">
+            <button class="switch-btn active" id="modeFileBtn" onclick="setSourceMode('file')">Z Pliku .dat</button>
+            <button class="switch-btn" id="modeRandBtn" onclick="setSourceMode('random')">Losowy Graf</button>
+          </div>
+
+          <!-- File Controls -->
+          <div id="fileControlsGroup" class="control-group">
+            <label for="fileSelect">Wybierz plik danych:</label>
+            <select id="fileSelect" class="form-control">
+              <option value="">Wczytywanie listy plików...</option>
+            </select>
+          </div>
+
+          <!-- Random Controls -->
+          <div id="randControlsGroup" class="control-group hidden">
+            <div class="form-row">
+              <label>Liczba Zadań:</label>
+              <input type="number" id="randTasks" class="form-control" value="20" min="2" max="200">
+            </div>
+            <div class="form-row">
+              <label>Hardware Cores (HC):</label>
+              <input type="number" id="randHC" class="form-control" value="4" min="1" max="20">
+            </div>
+            <div class="form-row">
+              <label>Processing Units (PE):</label>
+              <input type="number" id="randPE" class="form-control" value="4" min="1" max="20">
+            </div>
+            <div class="form-row">
+              <label>Kanały Danych (COM):</label>
+              <input type="number" id="randChannels" class="form-control" value="1" min="1" max="10">
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="randWithCost" checked>
+              <label for="randWithCost">Generuj z kosztami sprzętu</label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="randConditional">
+              <label for="randConditional">Dodaj zadania warunkowe</label>
+            </div>
+          </div>
+
+          <!-- Strategy Selection -->
+          <div class="control-group margin-top">
+            <label for="strategySelect">Strategia Szeregowania:</label>
+            <select id="strategySelect" class="form-control">
+              <option value="1">S1 — Najszybsza Dedykowana (Min-Time)</option>
+              <option value="2">S2 — Najtańsza Dedykowana (Min-Cost)</option>
+              <option value="3">S3 — Najszybsza z Upakowywaniem Instancji</option>
+              <option value="5">S5 — Poziomowa BFS (Level-Order Scheduling)</option>
+              <option value="6">S6 — Zachłanna Ścieżki Krytycznej (Critical-Path Greedy)</option>
+              <option value="7">S7 — Hybrydowa z Rafinacją (Two-Phase Refined)</option>
+              <option value="8" selected>S8 — Optymalizacja Kosztowo-Czasowa z Funkcją Kary</option>
+              <option value="9">S9 — Monolityczna Jednoprocesorowa (Single Core Baseline)</option>
+            </select>
+          </div>
+
+          <!-- Main Actions -->
+          <div class="actions">
+            <button class="btn btn-primary" onclick="runSimulation()">
+              <span class="btn-icon">🚀</span> Uruchom Symulację
+            </button>
+            <button class="btn btn-secondary" onclick="runBenchmark()">
+              <span class="btn-icon">📊</span> Porównaj Strategie
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Summary Stats -->
+        <div class="card margin-top">
+          <h3 class="card-title">📈 Szybkie Podsumowanie</h3>
+          <div class="quick-stats">
+            <div class="stat-box">
+              <span class="stat-label">Czas Ścieżki Krytycznej</span>
+              <span class="stat-value" id="quickCritTime">-</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Całkowity Koszt Systemu</span>
+              <span class="stat-value highlight" id="quickTotalCost">-</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Utworzone Instancje</span>
+              <span class="stat-value" id="quickInstances">-</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Central Workspace -->
+      <main class="workspace">
+        <!-- View Navigation Tabs -->
+        <nav class="view-tabs">
+          <button class="tab-btn active" onclick="switchView('gantt')">
+            <span class="tab-icon">📅</span> Wykres Gantta
+          </button>
+          <button class="tab-btn" onclick="switchView('liveSim')">
+            <span class="tab-icon">⚡</span> Symulacja Live
+          </button>
+          <button class="tab-btn" onclick="switchView('dag')">
+            <span class="tab-icon">🕸️</span> Graf Zadań (DAG)
+          </button>
+          <button class="tab-btn" onclick="switchView('benchmark')">
+            <span class="tab-icon">🏆</span> Analiza i Porównanie
+          </button>
+          <button class="tab-btn" onclick="switchView('editor')">
+            <span class="tab-icon">📝</span> Podgląd Pliku Plik .dat
+          </button>
+        </nav>
+
+        <!-- View 1: Gantt Chart -->
+        <section id="viewGantt" class="view-panel active">
+          <div class="panel-header">
+            <h3>Wykres Gantta Harmonogramu Zadań</h3>
+            <div class="chart-controls">
+              <label>Skala X:</label>
+              <input type="range" id="ganttZoom" min="1" max="5" value="2" oninput="renderGantt()">
+              <span id="ganttZoomVal">2x</span>
+            </div>
+          </div>
+          <div class="gantt-wrapper" id="ganttWrapper">
+            <div id="ganttChart" class="gantt-chart"></div>
+          </div>
+        </section>
+
+        <!-- View: Live Interactive Simulation -->
+        <section id="viewLiveSim" class="view-panel">
+          <div class="panel-header">
+            <h3>⚡ Interaktywna Symulacja w Czasie Rzeczywistym</h3>
+            <div class="live-strategy-selector">
+              <label>Strategia:</label>
+              <select id="liveStrategySelect" class="form-control" onchange="changeLiveStrategy(this.value)">
+                <option value="1">S1 — Najszybsza Dedykowana (Min-Time)</option>
+                <option value="2">S2 — Najtańsza Dedykowana (Min-Cost)</option>
+                <option value="3">S3 — Najszybsza z Upakowywaniem Instancji</option>
+                <option value="5">S5 — Poziomowa BFS (Level-Order)</option>
+                <option value="6">S6 — Zachłanna Ścieżki Krytycznej</option>
+                <option value="7">S7 — Hybrydowa z Rafinacją</option>
+                <option value="8" selected>S8 — Optymalizacja z Funkcją Kary</option>
+                <option value="9">S9 — Monolityczna Baseline</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Controls Bar -->
+          <div class="live-controls-bar">
+            <div class="btn-group">
+              <button id="btnLivePlay" class="btn btn-primary btn-sm" onclick="LiveSimulator.togglePlay()">
+                <span id="livePlayIcon">▶</span> <span id="livePlayText">Uruchom</span>
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="LiveSimulator.step()">
+                ⏭ Krok (+1)
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="LiveSimulator.reset()">
+                🔄 Reset
+              </button>
+            </div>
+
+            <!-- Speed / Tempo Slider -->
+            <div class="tempo-control">
+              <span>⏱️ Tempo (ms/tyknięcie):</span>
+              <input type="range" id="simTempoSlider" min="20" max="1000" value="200" step="10" oninput="LiveSimulator.onSpeedChange(this.value)">
+              <span id="simTempoVal" class="badge">200 ms</span>
+              <div class="quick-speed-btns">
+                <button class="btn-speed" onclick="LiveSimulator.setSpeedRatio(0.5)">0.5x</button>
+                <button class="btn-speed active" id="btnSpeed1x" onclick="LiveSimulator.setSpeedRatio(1.0)">1x</button>
+                <button class="btn-speed" onclick="LiveSimulator.setSpeedRatio(2.0)">2x</button>
+                <button class="btn-speed" onclick="LiveSimulator.setSpeedRatio(5.0)">5x</button>
+                <button class="btn-speed" onclick="LiveSimulator.setSpeedRatio(10.0)">10x</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Digital Time Banner -->
+          <div class="live-time-banner">
+            <div class="time-display">
+              <span class="time-label">CZAS SYMULACJI:</span>
+              <span class="time-digit" id="liveTimeDigit">t = 0</span>
+              <span class="time-max" id="liveTimeMax">/ 0 ms</span>
+            </div>
+            <div class="live-progress-container">
+              <div id="liveProgressBar" class="live-progress-bar" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Dashboard Grid -->
+          <div class="live-dashboard-grid">
+            <!-- Left: Resource Cards -->
+            <div class="resource-panel">
+              <h4>🖥️ Stan Instancji Procesorów</h4>
+              <div id="liveResourceCards" class="resource-cards-grid">
+                <div class="empty-state">Brak danych symulacji. Uruchom symulację.</div>
+              </div>
+            </div>
+
+            <!-- Right: Task Status Queues -->
+            <div class="task-status-panel">
+              <h4>📋 Kolejka i Stan Zadań</h4>
+
+              <div class="status-box status-running">
+                <div class="status-box-header">
+                  <span>🔵 W Trakcie Wykonania</span>
+                  <span id="countRunningTasks" class="badge badge-running">0</span>
+                </div>
+                <div id="listRunningTasks" class="task-pill-container"></div>
+              </div>
+
+              <div class="status-box status-pending">
+                <div class="status-box-header">
+                  <span>⏳ Oczekujące w Kolejce</span>
+                  <span id="countPendingTasks" class="badge badge-pending">0</span>
+                </div>
+                <div id="listPendingTasks" class="task-pill-container"></div>
+              </div>
+
+              <div class="status-box status-completed">
+                <div class="status-box-header">
+                  <span>✅ Zakończone</span>
+                  <span id="countCompletedTasks" class="badge badge-completed">0</span>
+                </div>
+                <div id="listCompletedTasks" class="task-pill-container"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 2: DAG Network Visualizer -->
+        <section id="viewDag" class="view-panel">
+          <div class="panel-header">
+            <h3>Graf Zależności Zadań (DAG)</h3>
+            <span class="legend-note">Zadania normalne: niebieskie | Warunkowe: różowe | Nieprzewidziane: żółte</span>
+          </div>
+          <div class="dag-wrapper">
+            <svg id="dagSvg" class="dag-svg"></svg>
+          </div>
+        </section>
+
+        <!-- View 3: Benchmark Analytics -->
+        <section id="viewBenchmark" class="view-panel">
+          <div class="panel-header">
+            <h3>Porównanie Wyników Strategii Szeregowania</h3>
+          </div>
+          <div class="benchmark-container">
+            <div id="benchmarkCards" class="benchmark-cards"></div>
+            <div class="chart-box">
+              <h4>Porównanie Czasu Ścieżki Krytycznej vs Kosztu Całkowitego</h4>
+              <div id="benchmarkBarChart" class="bar-chart-container"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 4: Data File Editor -->
+        <section id="viewEditor" class="view-panel">
+          <div class="panel-header">
+            <h3 id="editorTitle">Podgląd Pliku Konfiguracyjnego</h3>
+            <button class="btn btn-sm btn-secondary" onclick="saveEditorContent()">💾 Zapisz Plik</button>
+          </div>
+          <div class="editor-wrapper">
+            <textarea id="fileEditorTextarea" class="code-editor" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <!-- Bottom Log Console -->
+        <div class="console-panel">
+          <div class="console-header">
+            <span>💻 Konsola Wyjściowa Silnika C++</span>
+            <button class="btn-clear" onclick="clearConsole()">Wyczyść</button>
+          </div>
+          <pre id="consoleOutput" class="console-output">Gotowy do wykonania symulacji.</pre>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
